@@ -1,0 +1,16 @@
+node_modules/
+dist/
+*.log
+
+.env
+secrets/*.env
+!secrets/.gitkeep
+
+backups/*
+!backups/.gitkeep
+
+logs/*
+!logs/.gitkeep
+
+infra/traefik/certs/*
+!infra/traefik/certs/.gitkeep
