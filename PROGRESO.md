@@ -101,5 +101,42 @@ mismo tipo de workaround (leer archivos directo por `/mnt/c` en vez de
 ejecutar el binario, o pedirle el paso MANUAL al usuario si hace falta
 ejecutar algo interactivo en Windows).
 
+## Task 7: Canario whoami + scripts up.sh/down.sh
+**Estado:** completa, con un fix post-revisión. Commit implementación `389a138`,
+fix `5590a70`.
+
+Implementación inicial limpia (4 archivos, contenido verbatim del brief), pero
+la revisión encontró un **Critical real**: `scripts/up.sh` y `scripts/down.sh`
+quedaron commiteados sin permiso de ejecución (modo `100644` en vez de
+`100755`), rompiendo la interfaz `./scripts/up.sh [servicio]` que las Tareas 8
+y 12 necesitan. Además el reporte del implementador se contradecía a sí mismo
+(afirmaba haber verificado `-rwxr-xr-x` pero pegaba el output de `git commit`
+mostrando `100644`) — se pidió re-verificación independiente completa de los
+Steps 6-9, no solo el fix del modo.
+
+**Causa raíz y decisión del controlador (repo-wide, no solo esta tarea):** el
+repo tenía `core.fileMode=false` en `.git/config`, heredado de cuando vivía en
+el mount de Windows (donde los bits de permiso Unix no son confiables). Con
+`fileMode=false`, git ignora silenciosamente cualquier cambio de modo — por
+eso el `chmod +x` del implementador nunca se reflejó en el commit y ni
+`git status` ni `git diff` lo mostraron como pendiente. Esto iba a repetirse
+en la Task 8 (3 scripts más). Decisión: activar `core.fileMode=true` (el repo
+vive en ext4 nativo de WSL, donde los permisos sí son confiables). Al
+activarlo aparecieron ~27 archivos preexistentes con modo `777` en disco
+(arrastrados de la migración Tarea 3, cuando el mount de Windows/DrvFs
+reportaba todo como 777) pero `644` en git — sin diferencia de contenido. Se
+normalizó el modo real a `644` (`chmod 644` sobre esos archivos, contenido sin
+tocar) para que coincida con lo commiteado; `scripts/up.sh`/`down.sh`
+conservaron su `755`. Working tree quedó limpio. Este ajuste de config es
+local a esta sesión de WSL (no es parte del repo versionado) — si se clona en
+otra máquina, `core.fileMode` vuelve al default de esa máquina (normalmente
+`true` en Linux/CI), así que no afecta Task 11 (CI) ni Task 12 (push).
+
+Re-verificación real (post-fix, independiente del reporte original): Steps
+6-9 corridos de nuevo — `nexora_traefik` y `nexora_whoami` ambos `Up`, canario
+responde por HTTPS con TLS confiable sin `-k`, `down.sh whoami` detiene solo
+whoami (Traefik sigue arriba), `up.sh` final deja el entorno consistente.
+Reporte con ambas rondas (original + fix) en `.superpowers/sdd/task-7-report.md`.
+
 ---
 *(este archivo se sigue actualizando después de cada tarea)*
