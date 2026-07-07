@@ -1,6 +1,6 @@
-# Diseño: Infraestructura base — Nexora Platform (sub-proyecto 1/8)
+# Diseño: Infraestructura base — Nexora Platform (sub-proyecto 1/9)
 
-**Fecha:** 2026-07-07
+**Fecha:** 2026-07-07 (revisado el mismo día tras feedback del usuario)
 **Estado:** Aprobado, pendiente de plan de implementación
 
 ## Contexto
@@ -8,30 +8,42 @@
 Nexora-IA hoy corre como un bot (Telegram/WhatsApp) + panel en un VPS de Hostinger,
 usando Supabase como base de datos hosteada. Este documento diseña la base de una
 **nueva plataforma self-hosted** (`Nexora Platform`) pensada para eventualmente
-reemplazar ese stack: Postgres propio, automatización con n8n, búsqueda semántica,
-mensajería, scraping y todo lo necesario para operar Nexora-IA como SaaS
-multi-tenant para negocios de servicios (peluquerías, barberías, spas, estética).
+reemplazar ese stack.
+
+La plataforma **no se limita a negocios de servicios**. Está pensada para
+atender cualquier tipo de cliente: comercios, distribuidoras, talleres,
+profesionales independientes, industrias, instituciones y entidades públicas.
+El modelo de datos (sub-proyecto 2) y los agentes de IA (sub-proyecto 5) deben
+diseñarse pensando en verticales distintas desde el principio, no como un caso
+particular de "negocio de servicios" extendido después.
 
 No se toca el bot actual en producción durante este trabajo.
 
 ## Por qué esto se dividió en sub-proyectos
 
-El pedido original cubre infraestructura base, capa de datos, automatización,
-mensajería, IA/RAG, scraping/testing, seguridad y documentación — ocho subsistemas
-en gran medida independientes. Diseñarlos y planearlos todos juntos produce un
-spec ingobernable. Se decidió trabajar cada uno como su propio ciclo
-diseño → spec → plan → implementación, empezando por la infraestructura base
-porque todos los demás dependen de ella.
+El pedido original cubre infraestructura base, aplicaciones, capa de datos,
+automatización, mensajería, IA/RAG, scraping/testing, seguridad y
+documentación — múltiples subsistemas en gran medida independientes.
+Diseñarlos y planearlos todos juntos produce un spec ingobernable. Se decidió
+trabajar cada uno como su propio ciclo diseño → spec → plan → implementación,
+empezando por la infraestructura base porque todos los demás dependen de ella.
 
 **Orden de sub-proyectos:**
-1. **Infra base** (este documento) — Docker Compose, red, Traefik, secrets, scripts.
+1. **Infra base** (este documento) — Docker Compose, red, Traefik, secrets,
+   scripts, monorepo, CI, ADRs.
 2. Capa de datos — PostgreSQL multi-tenant, Redis, Qdrant, MinIO.
 3. Motor de automatización — n8n.
 4. Mensajería — Evolution API (WhatsApp), integración Telegram.
-5. Capa de IA — memoria conversacional, embeddings, búsqueda semántica.
-6. Scraping/testing — Playwright, Firecrawl.
-7. Seguridad y operaciones — backups, monitoreo, logs, rotación de secretos.
-8. Documentación — se escribe por capa, no como proyecto aparte.
+5. Capa de IA — prompts, knowledge, memoria, embeddings, agentes (`apps/agents`).
+6. Aplicaciones — `apps/api`, `apps/admin`, `apps/web`.
+7. Scraping/testing — Playwright, Firecrawl, tests de integración/e2e/carga.
+8. Seguridad y operaciones — backups, monitoreo, logs, rotación de secretos.
+9. Documentación — se escribe por capa, no como proyecto aparte.
+
+`apps/agents` se construye en el sub-proyecto 5 (Capa de IA) porque su lógica
+depende directamente de `ai/` (prompts, memoria, embeddings); `apps/api`,
+`apps/admin` y `apps/web` son consumidores de esa capa y se agrupan en el
+sub-proyecto 6.
 
 ## Decisiones de contexto (confirmadas con el usuario)
 
@@ -39,112 +51,232 @@ porque todos los demás dependen de ella.
   versión de Nexora-IA, para reemplazar eventualmente Supabase. Arranca en
   desarrollo local (Windows + WSL2) y está pensada para escalar a un VPS propio
   sin rediseño.
+- **Alcance de negocio:** multi-vertical desde el diseño — no solo negocios de
+  servicios. Ver [ADR-0005](../architecture/decisions/0005-alcance-multivertical.md).
 - **Multi-tenancy:** schema compartido en Postgres, todas las tablas con columna
-  `tenant_id`, aislamiento vía Row-Level Security. Es el patrón estándar de SaaS
-  B2B: migraciones únicas, escala bien a cientos de tenants, sin la complejidad
-  operativa de un schema o una base por cliente.
-- **Entorno de desarrollo:** se instala WSL2 con Ubuntu 22.04 como shell principal
-  de trabajo — mismo SO que el VPS de producción actual, evita discrepancias
-  Windows/Linux. Docker Desktop ya corre en Windows; se habilita su integración
-  con esta distro.
+  `tenant_id`, aislamiento vía Row-Level Security. Ver
+  [ADR-0003](../architecture/decisions/0003-multi-tenant-schema-compartido-rls.md).
+- **Entorno de desarrollo:** WSL2 con Ubuntu 22.04 como shell principal de
+  trabajo — mismo SO que el VPS de producción actual.
 - **Repositorio:** proyecto nuevo en `C:\Users\PC\Proyectos-Nexora\Nexora - Platform\`,
-  con repo propio en GitHub (org `EmpresaNexusIA`, nombre sugerido `nexora-platform`),
-  separado de `Nexora - Bot` porque es una plataforma nueva, no una modificación
-  del bot existente.
+  con repo propio en GitHub (org `EmpresaNexusIA`, nombre sugerido
+  `nexora-platform`), separado de `Nexora - Bot`.
+- **Monorepo con pnpm workspaces (nuevo, ver justificación abajo).**
+
+### Por qué pnpm workspaces para `apps/` y `shared/`
+
+El pedido de una carpeta `shared/` con `types`, `schemas` y `libraries`
+consumida por varias `apps/` (api, admin, web, agents) es, en los hechos, un
+pedido de monorepo. Sin una herramienta de workspaces, `shared/` termina
+copy-pasteado o enlazado a mano entre apps, que es exactamente el tipo de
+deuda técnica que este proyecto busca evitar desde el día uno.
+
+Se evaluaron 3 opciones:
+
+- **npm workspaces** — ya viene con Node, cero dependencias nuevas, pero
+  resolución de dependencias más lenta y menos estricta (permite "phantom
+  dependencies").
+- **pnpm workspaces (elegida)** — mismo modelo mental que npm workspaces, pero
+  instalación más rápida y un `node_modules` estricto por paquete que evita
+  que una app dependa "por accidente" de algo que no declaró. Es hoy el
+  estándar de facto para monorepos de este tamaño.
+- **Turborepo/Nx sobre pnpm** — agrega cacheo de builds y ejecución paralela
+  de tareas entre paquetes. Valioso cuando hay muchos paquetes y los builds
+  empiezan a ser lentos, pero es una capa de más para un monorepo que hoy
+  tiene 4 apps y 3 paquetes compartidos. **Se descarta por ahora** (YAGNI);
+  queda anotado como candidato natural si el tiempo de build se vuelve un
+  problema real (sub-proyecto 6 en adelante).
+
+Cada carpeta en `apps/*` y `shared/*` es un paquete pnpm independiente con su
+propio `package.json`, bajo el scope `@nexora/*` (`@nexora/types`,
+`@nexora/schemas`, `@nexora/lib`, `@nexora/api`, ...). Este sub-proyecto solo
+crea el esqueleto (paquetes vacíos que resuelven correctamente entre sí);
+el código real de cada app se construye en su sub-proyecto correspondiente.
 
 ## Arquitectura de la infra base
 
 ### Organización de Docker Compose
 
-Se descartó un único `docker-compose.yml` monolítico (approach evaluado y
-rechazado) porque con 8+ servicios se vuelve difícil de mantener y no permite
-actualizar un servicio sin tocar el resto — requisito explícito del usuario.
+Se descartó un único `docker-compose.yml` monolítico porque con 8+ servicios
+se vuelve difícil de mantener y no permite actualizar un servicio sin tocar el
+resto. En su lugar: **Compose modular** — cada servicio vive en su propia
+carpeta con su propio `compose.yaml`, combinados desde un orquestador raíz
+mediante `include:` (Compose v2.20+). Ver
+[ADR-0001](../architecture/decisions/0001-modular-compose.md).
 
-En su lugar: **Compose modular**. Cada servicio vive en su propia carpeta con su
-propio `compose.yaml`, combinados desde un orquestador raíz mediante la
-directiva `include:` de Compose (soportada desde v2.20).
+### Reverse proxy: Traefik
 
-### Reverse proxy: Traefik (en vez de Nginx)
+Se eligió Traefik sobre Nginx por auto-discovery vía labels de Docker y TLS
+automático (Let's Encrypt) — agregar un servicio nuevo no requiere tocar
+config central de proxy. Ver
+[ADR-0002](../architecture/decisions/0002-traefik-como-reverse-proxy.md).
 
-El pedido original mencionaba Nginx, pero se evaluaron 3 opciones y se eligió
-**Traefik** porque resuelve directamente el requisito de "cada componente se
-actualiza sin afectar a los demás":
-
-- Auto-discovery de servicios vía labels de Docker — agregar un servicio nuevo
-  no requiere editar config central de proxy.
-- Certificados TLS automáticos (Let's Encrypt).
-- Dashboard propio, protegido con auth básica y expuesto en subdominio propio.
-
-Entrypoints: `web` (80, redirige a 443) y `websecure` (443, TLS).
-En local, los hosts se resuelven como `*.nexora.localhost` (sin tocar `hosts`,
-los navegadores modernos resuelven `.localhost` a 127.0.0.1 automáticamente).
+Entrypoints: `web` (80, redirige a 443) y `websecure` (443, TLS). Dashboard
+protegido con auth básica en subdominio propio. En local, hosts resueltos como
+`*.nexora.localhost`.
 
 ### Red y volúmenes
 
-- Una única red Docker externa `nexora_net`, creada por
-  `infra/network/compose.yaml`, a la que se conectan todos los servicios.
-  Evita el problema de Compose de crear una red por stack que no se puede
-  alcanzar entre sí.
-- Servicios sin necesidad de exposición externa (Postgres, Redis, Qdrant) no
-  publican puertos al host — solo alcanzables dentro de `nexora_net`.
-- Volúmenes con nombre, prefijo `nexora_` (`nexora_postgres_data`,
-  `nexora_qdrant_data`, etc.), sin bind mounts. El prefijo común es lo que
-  permite que un script de backup recorra todos los volúmenes de la plataforma
-  genéricamente.
+- Red Docker externa única `nexora_net` (`infra/network/compose.yaml`).
+- Servicios internos (Postgres, Redis, Qdrant) no publican puertos al host.
+- Volúmenes con nombre, prefijo `nexora_`, sin bind mounts — permite que un
+  script de backup los recorra genéricamente.
 
 ### Secrets y configuración
 
-- `env/*.env.example` — plantillas versionadas en git, sin valores reales.
-- `secrets/*.env` — valores reales, uno por servicio (`secrets/postgres.env`,
-  `secrets/n8n.env`, ...), gitignored. Cada compose de servicio referencia solo
-  el suyo (`env_file: ../../../secrets/<servicio>.env`), no hay un `.env`
-  gigante compartido.
-- Convención pensada para trasladarse tal cual al VPS más adelante (mismos
-  archivos, permisos `600`, fuera de control de versión). La gestión de
-  secretos en producción (vault, rotación) se profundiza en el sub-proyecto 7
-  (Seguridad y operaciones); acá solo se deja la convención lista.
+- `env/*.env.example` — plantillas versionadas, sin valores reales.
+- `secrets/*.env` — valores reales, uno por servicio, gitignored.
+- Convención pensada para trasladarse tal cual al VPS (permisos `600`, fuera
+  de control de versión). Gestión avanzada de secretos: sub-proyecto 8.
 
-### Estructura de carpetas
+### Observabilidad (reservado)
+
+Carpeta `monitoring/` creada vacía (con `README.md` explicando la intención)
+para alojar, en el sub-proyecto 8, compose files de Prometheus (métricas),
+Grafana (dashboards) y Loki (logs centralizados) — consistente con que ya
+usamos el patrón de compose modular por servicio.
+
+### Testing
+
+- Tests unitarios: colocados junto a cada paquete/app (`apps/api/src/**/*.test.ts`),
+  no en `tests/` — es el estándar y evita que `tests/` crezca sin límite.
+- `tests/` (raíz) es para pruebas **cross-cutting** que no pertenecen a una
+  sola app:
+  - `tests/integration/` — interacción entre servicios (p.ej. n8n → Postgres).
+  - `tests/e2e/` — Playwright contra el stack completo levantado.
+  - `tests/load/` — pruebas de carga. Se propone **k6** (scriptable en
+    JS/TS, coherente con el resto del stack, liviano) como herramienta,
+    a confirmar cuando este sub-proyecto se aborde en profundidad
+    (sub-proyecto 7).
+- Este sub-proyecto crea la carpeta y su README explicando la convención; el
+  contenido real de cada tipo de test se agrega en el sub-proyecto dueño de lo
+  que se está probando.
+
+### CI/CD (`.github/workflows/`)
+
+Alcance de este sub-proyecto: un workflow mínimo de **CI** que corre en cada
+push/PR:
+- Valida que todos los `compose.yaml` son sintácticamente correctos
+  (`docker compose config`).
+- Lint del monorepo (`pnpm lint` a nivel raíz, delega a cada paquete).
+
+**CD (deploy automático al VPS) queda fuera de alcance** de este sub-proyecto:
+requiere decisiones de acceso/secrets al VPS que se toman en el sub-proyecto 8
+(Seguridad y operaciones), cuando ya haya algo real para deployar.
+
+### Registro de decisiones de arquitectura (ADR)
+
+Carpeta `docs/architecture/decisions/`, formato basado en MADR (el estándar
+más adoptado para ADRs livianos), un archivo por decisión,
+numerado y versionado en git junto con el código:
+
+```
+docs/architecture/decisions/
+├── 0000-template.md
+├── 0001-modular-compose.md
+├── 0002-traefik-como-reverse-proxy.md
+├── 0003-multi-tenant-schema-compartido-rls.md
+├── 0004-pnpm-workspaces-monorepo.md
+└── 0005-alcance-multivertical.md
+```
+
+Plantilla (`0000-template.md`):
+
+```markdown
+# NNNN. Título de la decisión
+
+**Fecha:** YYYY-MM-DD
+**Estado:** Propuesta | Aceptada | Reemplazada por ADR-XXXX | Rechazada
+
+## Contexto
+¿Qué problema u obligación técnica nos hace falta resolver?
+
+## Decisión
+¿Qué se decidió, en una o dos frases?
+
+## Alternativas consideradas
+Opciones evaluadas y por qué no se eligieron.
+
+## Consecuencias
+Qué mejora, qué se vuelve más difícil, qué queda pendiente a futuro.
+```
+
+Este sub-proyecto crea la plantilla y los 5 ADR correspondientes a decisiones
+ya tomadas en este mismo diseño (Compose modular, Traefik, multi-tenant RLS,
+monorepo pnpm, alcance multivertical). A partir de acá, cada sub-proyecto
+agrega sus propios ADR cuando tome una decisión de arquitectura relevante —
+no todo cambio necesita uno, solo decisiones que costaría revertir.
+
+### Estructura de carpetas (actualizada)
 
 ```
 Nexora - Platform/
+├── apps/
+│   ├── api/            ← paquete @nexora/api (esqueleto, sub-proyecto 6)
+│   ├── admin/           ← paquete @nexora/admin (esqueleto, sub-proyecto 6)
+│   ├── web/              ← paquete @nexora/web (esqueleto, sub-proyecto 6)
+│   └── agents/           ← paquete @nexora/agents (esqueleto, sub-proyecto 5)
+├── ai/
+│   ├── prompts/          ← plantillas de prompts versionadas
+│   ├── knowledge/        ← documentos fuente para RAG (previos a embeddings)
+│   ├── memory/            ← diseño/config de estrategias de memoria conversacional
+│   ├── embeddings/        ← scripts/config del pipeline de embeddings
+│   └── workflows/         ← definiciones de workflows de n8n exportadas (JSON), versionadas
+├── shared/
+│   ├── types/             ← paquete @nexora/types
+│   ├── schemas/            ← paquete @nexora/schemas
+│   └── libraries/           ← paquete @nexora/lib
 ├── infra/
-│   ├── compose.yaml              ← orquestador raíz (usa include:)
+│   ├── compose.yaml        ← orquestador raíz (usa include:)
 │   ├── traefik/
 │   │   ├── compose.yaml
-│   │   ├── traefik.yml           ← config estática (entrypoints, providers)
-│   │   └── dynamic/              ← middlewares (auth, rate-limit) por servicio
+│   │   ├── traefik.yml
+│   │   └── dynamic/
 │   ├── network/
-│   │   └── compose.yaml          ← red compartida (se crea una sola vez)
+│   │   └── compose.yaml
 │   └── services/
 │       ├── n8n/compose.yaml
 │       ├── postgres/compose.yaml
 │       ├── redis/compose.yaml
 │       ├── qdrant/compose.yaml
 │       ├── minio/compose.yaml
-│       └── evolution-api/compose.yaml   ← se agrega en su sub-proyecto
-├── secrets/                      ← *.env reales, gitignored
+│       └── evolution-api/compose.yaml
+├── monitoring/            ← vacío por ahora (Prometheus/Grafana/Loki, sub-proyecto 8)
+├── tests/
+│   ├── integration/
+│   ├── e2e/
+│   └── load/
+├── secrets/                ← *.env reales, gitignored
 ├── env/
 │   └── *.env.example
 ├── scripts/
 │   ├── up.sh / down.sh
 │   ├── update-service.sh
-│   └── backup.sh / restore.sh    ← esqueleto funcional, se profundiza en sub-proyecto 7
+│   └── backup.sh / restore.sh
 ├── docs/
 │   ├── 00-overview.md
-│   ├── services/                 ← un doc por servicio
+│   ├── architecture/
+│   │   └── decisions/     ← ADRs (0000-template.md, 0001..0005)
+│   ├── services/
 │   └── runbooks/
-├── backups/                      ← gitignored, con .gitkeep
+├── .github/
+│   └── workflows/
+│       └── ci.yml          ← valida compose + lint del monorepo
+├── backups/                ← gitignored, con .gitkeep
 ├── logs/
+├── package.json             ← raíz del monorepo (pnpm workspaces)
+├── pnpm-workspace.yaml
 ├── .gitignore
 ├── README.md
 └── CLAUDE.md
 ```
 
-Este sub-proyecto crea el esqueleto completo de carpetas, pero solo llena de
-contenido real `infra/network/`, `infra/traefik/` y los scripts — los
-`compose.yaml` de `infra/services/*` (n8n, postgres, etc.) se completan en sus
-propios sub-proyectos.
+Este sub-proyecto crea el esqueleto completo de carpetas y llena de contenido
+real: `infra/network/`, `infra/traefik/`, `scripts/`, `pnpm-workspace.yaml` +
+paquetes vacíos en `apps/*` y `shared/*`, `.github/workflows/ci.yml`, y los
+ADR 0001-0005. El contenido de negocio de cada carpeta (`infra/services/*`,
+`ai/*`, código real de `apps/*`, `monitoring/*`, tests reales) se completa en
+sus sub-proyectos correspondientes.
 
 ### Scripts de flujo de trabajo
 
@@ -155,36 +287,45 @@ propios sub-proyectos.
   afectar al resto.
 - `backup.sh` / `restore.sh` — recorren volúmenes con prefijo `nexora_` y hacen
   `docker run --rm -v <vol>:/data -v .../backups:/backup alpine tar czf ...`.
-  Funcionales desde el día uno para los volúmenes que existan; se profundizan
-  (retención, cifrado, backups remotos) en el sub-proyecto 7.
+  Funcionales desde el día uno; se profundizan (retención, cifrado, backups
+  remotos) en el sub-proyecto 8.
 
 ### Entorno de desarrollo (WSL2)
 
 Se instala `Ubuntu-22.04` vía `wsl --install -d Ubuntu-22.04`, se deja como
-distro por defecto, y se configura ahí: Git, Node vía nvm, y se confirma que
-Docker Desktop tiene habilitada su integración con esa distro (Settings →
+distro por defecto, y se configura ahí: Git, Node vía nvm, pnpm, y se confirma
+que Docker Desktop tiene habilitada su integración con esa distro (Settings →
 Resources → WSL Integration). Todo el trabajo de este proyecto se hace parado
-en esa shell — mismo SO que el VPS de producción actual (Ubuntu 22.04).
+en esa shell — mismo SO que el VPS de producción actual.
 
 ## Criterio de éxito / cómo se valida este sub-proyecto
 
 1. `./scripts/up.sh` levanta `network` + `traefik` sin errores.
-2. Un contenedor "canario" (`traefik/whoami`, imagen estándar de prueba) queda
-   accesible en `https://whoami.nexora.localhost` con certificado válido —
-   prueba que el auto-discovery y TLS funcionan de punta a punta.
+2. Un contenedor "canario" (`traefik/whoami`) queda accesible en
+   `https://whoami.nexora.localhost` con certificado válido.
 3. `./scripts/update-service.sh whoami` lo actualiza sin bajar Traefik ni la
    red compartida.
-4. Estructura de carpetas, `.gitignore`, `README.md` y docs base commiteados
-   en el repo nuevo (`nexora-platform`, org `EmpresaNexusIA`).
+4. `pnpm install` en la raíz resuelve correctamente los paquetes de `apps/*` y
+   `shared/*` (esqueleto), sin errores de dependencias.
+5. El workflow `.github/workflows/ci.yml` corre en verde en un PR de prueba
+   (valida compose + lint).
+6. Existen los 6 archivos de `docs/architecture/decisions/` (plantilla + 5 ADR).
+7. Estructura de carpetas completa, `.gitignore`, `README.md` y docs base
+   commiteados en el repo nuevo (`nexora-platform`, org `EmpresaNexusIA`).
 
-Este sub-proyecto **no** incluye Postgres, n8n, Qdrant, MinIO ni Evolution API
-reales — esos son el contenido de los sub-proyectos 2 en adelante, que se
-apoyan sobre esta base ya validada.
+Este sub-proyecto **no** incluye Postgres, n8n, Qdrant, MinIO, Evolution API,
+ni código real de `apps/*` o `ai/*` — eso es el contenido de los sub-proyectos
+2 en adelante, que se apoyan sobre esta base ya validada.
 
 ## Fuera de alcance (explícitamente, para este sub-proyecto)
 
 - Configuración real de cualquier servicio de negocio (n8n, Postgres, etc.).
-- Estrategia de backups remotos / retención / cifrado (sub-proyecto 7).
-- Gestión de secretos en producción más allá de archivos `.env` (sub-proyecto 7).
-- Monitoreo y logging centralizado (sub-proyecto 7).
-- Deploy al VPS (se hace cuando la base esté validada localmente).
+- Código real de `apps/api`, `apps/admin`, `apps/web`, `apps/agents` — solo
+  esqueleto de paquete.
+- Contenido real de `ai/*` (prompts reales, pipeline de embeddings, etc.).
+- Estrategia de backups remotos / retención / cifrado (sub-proyecto 8).
+- Gestión de secretos en producción más allá de archivos `.env` (sub-proyecto 8).
+- Monitoreo real (Prometheus/Grafana/Loki) — solo la carpeta reservada.
+- Tests reales de integración/e2e/carga — solo la carpeta y convención.
+- CD (deploy automático al VPS).
+- Deploy al VPS en sí (se hace cuando la base esté validada localmente).
