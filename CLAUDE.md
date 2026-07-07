@@ -7,8 +7,14 @@ WSL `Ubuntu-22.04` (usuario `nexora`), nunca directo en PowerShell/Git Bash.
 Desde una sesión de Claude Code en Windows, invocar así:
 
 ```bash
-wsl.exe -d Ubuntu-22.04 -- bash -lc 'cd "/mnt/c/Users/PC/Proyectos-Nexora/Nexora - Platform" && <comando>'
+wsl.exe -d Ubuntu-22.04 -- bash -lc 'cd /home/nexora/nexora-platform && <comando>'
 ```
+
+El repo vive en el filesystem nativo de WSL (`/home/nexora/nexora-platform`),
+no en `C:\` — `pnpm install` falla de forma reproducible (`EPERM: operation
+not permitted, futime`) contra rutas Windows-montadas (`/mnt/c/...`), una
+incompatibilidad conocida de WSL2/DrvFs. Desde Windows, el mismo repo se ve en
+`\\wsl.localhost\Ubuntu-22.04\home\nexora\nexora-platform`.
 
 ## Convenciones del repo
 
