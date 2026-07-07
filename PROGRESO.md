@@ -138,5 +138,76 @@ responde por HTTPS con TLS confiable sin `-k`, `down.sh whoami` detiene solo
 whoami (Traefik sigue arriba), `up.sh` final deja el entorno consistente.
 Reporte con ambas rondas (original + fix) en `.superpowers/sdd/task-7-report.md`.
 
+## Task 9: Carpetas reservadas
+**Estado:** completa y revisada limpia (Approved, sin issues). Commit `d393057`.
+
+## Task 10: ADRs (plantilla + 6 decisiones)
+**Estado:** completa y revisada limpia (Approved, sin issues, cross-referencias
+entre ADRs verificadas). Commit `7e7d4fa`.
+
+## Task 11: CI (`.github/workflows/ci.yml`)
+**Estado:** completa y revisada limpia (Approved, sin issues). Commit `a4e65c0`.
+Validado localmente: los 4 `compose.yaml` del repo parsean OK, `pnpm install
+--frozen-lockfile && pnpm run lint` sale en `0`.
+
+## Task 12: Repo en GitHub, push y validación final end-to-end
+**Estado:** PARCIAL — bloqueada en la parte de GitHub, necesita acción del usuario.
+
+**Lo que sí se hizo (todo lo que no depende de GitHub), re-verificado en vivo:**
+- Step 3 (criterio 1): `./scripts/down.sh && ./scripts/up.sh` → `nexora_traefik`
+  y `nexora_whoami` ambos `Up`. OK.
+- Step 4 (criterio 2): canario responde `200` por HTTPS con cert de mkcert,
+  sin `-k`. OK.
+- Step 5 (criterio 3): `update-service.sh whoami` no reinició Traefik
+  (`StartedAt` idéntico antes/después: `2026-07-07T21:16:01.258922152Z`). OK.
+- Step 6 (criterio 4): borré `node_modules` de todo el workspace y corrí
+  `pnpm install` desde cero → exit `0`, sin `ERR_PNPM_*`. OK.
+- Step 8 (criterio 6): `docs/architecture/decisions/` tiene exactamente 7
+  archivos (`0000-template.md` + `0001` a `0006`). OK.
+- Step 9 (criterio 7): `git status --porcelain` sin salida (working tree
+  limpio, aparte de `.superpowers/` y `docs/superpowers/plans/`, que son
+  scaffolding de proceso no versionado a propósito); `git log` muestra los 18
+  commits de las Tareas 2-11 sobre `master`. OK.
+
+**Lo que quedó BLOQUEADO — Steps 1, 2 y 7 (todo lo que toca GitHub real):**
+
+No hay forma de autenticarse contra GitHub en este entorno: `gh` no estaba
+instalado (lo instalé yo, versión 2.96.0, vía apt — paso reversible y de bajo
+riesgo, ya listo para cuando haya auth), pero `gh auth status` confirma "not
+logged into any GitHub host", y no hay alternativa disponible: sin
+`GH_TOKEN`/`GITHUB_TOKEN` en el entorno, sin `~/.ssh/` con clave para
+`github.com`, sin credential helper de git configurado. `gh auth login`
+requiere interacción humana (flujo de dispositivo: abrir una URL en el
+browser y pegar un código, o pegar un Personal Access Token) — no es algo que
+pueda resolver de forma autónoma.
+
+**Nota importante del propio plan (no es una restricción mía, ya estaba en el
+brief antes de este intento):** el Step 1 de esta tarea trae una advertencia
+explícita: *"esta tarea crea un repositorio real en GitHub (org
+`EmpresaNexusIA`) y hace push del historial completo. Es una acción visible
+para terceros — confirmar con el usuario el nombre/visibilidad exacta del
+repo (`nexora-platform`, privado) antes de ejecutar el Step 1."* La
+autorización general para trabajar sin pedir confirmaciones ya cubre esto
+(el usuario la dio explícitamente para terminar este plan), así que en cuanto
+haya credenciales disponibles, Steps 1-2 y 7 se pueden correr sin volver a
+preguntar — el nombre/visibilidad ya está fijado en el plan
+(`EmpresaNexusIA/nexora-platform`, privado).
+
+**Lo que falta para destrabar esto (acción del usuario):**
+1. Autenticar `gh` en esta sesión de WSL: `wsl.exe -d Ubuntu-22.04 -- gh auth login`
+   (sigue el flujo interactivo — browser + código, o pegar un token), **o**
+2. Correr el mismo comando desde una PowerShell donde `gh` ya esté logueado
+   como `EmpresaNexusIA` (el brief ya contempla esta alternativa — es el mismo
+   repo en disco vía `\\wsl.localhost\Ubuntu-22.04\home\nexora\nexora-platform`).
+
+Con cualquiera de las dos, quedan pendientes exactamente estos 3 comandos
+(ya con el contenido exacto en `.superpowers/sdd/task-12-brief.md`, Steps 1,
+2 y 7):
+```
+gh repo create EmpresaNexusIA/nexora-platform --private --source=. --remote=origin
+git push -u origin master
+# luego el ciclo de PR de prueba del Step 7 para confirmar CI en verde
+```
+
 ---
 *(este archivo se sigue actualizando después de cada tarea)*
