@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  validate-compose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Mostrar versión de Docker Compose
+        run: docker compose version
+
+      - name: Validar sintaxis de cada compose.yaml por separado
+        run: |
+          set -e
+          find . -name "compose.yaml" -not -path "*/node_modules/*" | while read -r file; do
+            echo "Validando $file"
+            docker compose -f "$file" config -q
+          done
+
+      - name: Validar el orquestador raíz (resuelve include: y interpolación cruzada)
+        run: docker compose -f infra/compose.yaml config -q
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm run lint
