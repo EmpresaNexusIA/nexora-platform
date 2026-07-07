@@ -157,7 +157,9 @@ Se descartó un único `docker-compose.yml` monolítico porque con 8+ servicios
 se vuelve difícil de mantener y no permite actualizar un servicio sin tocar el
 resto. En su lugar: **Compose modular** — cada servicio vive en su propia
 carpeta con su propio `compose.yaml`, combinados desde un orquestador raíz
-mediante `include:` (Compose v2.20+). Ver
+mediante `include:` (Compose v2.24+ — no v2.20+: `include:` en sí alcanza con
+v2.20+, pero la sintaxis larga de `env_file` usada en
+`infra/traefik/compose.yaml` necesita v2.24+). Ver
 [ADR-0001](../architecture/decisions/0001-modular-compose.md).
 
 ### Reverse proxy: Traefik

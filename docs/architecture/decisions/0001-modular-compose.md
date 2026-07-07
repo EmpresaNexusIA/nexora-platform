@@ -15,7 +15,9 @@ un servicio sin tocar la definición del resto.
 Cada servicio vive en su propia carpeta bajo `infra/` con su propio
 `compose.yaml` (`infra/traefik/compose.yaml`, `infra/services/<servicio>/compose.yaml`,
 etc.), combinados desde un orquestador raíz (`infra/compose.yaml`) mediante
-`include:` (soportado desde Docker Compose v2.20+).
+`include:` (soportado desde Docker Compose v2.20+; este repo además usa la
+sintaxis larga de `env_file` con `required: false` en
+`infra/traefik/compose.yaml`, que necesita v2.24+ — ver Consecuencias).
 
 ## Alternativas consideradas
 
@@ -33,5 +35,8 @@ etc.), combinados desde un orquestador raíz (`infra/compose.yaml`) mediante
   `include:` del orquestador raíz, sin tocar la definición de los demás.
 - `scripts/update-service.sh` puede actualizar un solo servicio sin bajar el
   resto del stack.
-- Requiere Docker Compose v2.20+ en cualquier entorno donde se use este repo
-  (local, CI, VPS) — ya validado en desarrollo (v5.3.0).
+- Requiere Docker Compose **v2.24+** (no v2.20+) en cualquier entorno donde se
+  use este repo (local, CI, VPS): `include:` alcanza con v2.20+, pero la
+  sintaxis larga de `env_file` (`- path: ... required: false`) usada en
+  `infra/traefik/compose.yaml` necesita v2.24+ (enero 2024) — ya validado en
+  desarrollo (v5.3.0) y en CI (`ubuntu-latest`).
