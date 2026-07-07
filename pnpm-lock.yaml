@@ -1,0 +1,78 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .:
+    devDependencies:
+      typescript:
+        specifier: ^6.0.3
+        version: 6.0.3
+
+  apps/admin:
+    dependencies:
+      '@nexora/lib':
+        specifier: workspace:*
+        version: link:../../shared/libraries
+      '@nexora/schemas':
+        specifier: workspace:*
+        version: link:../../shared/schemas
+      '@nexora/types':
+        specifier: workspace:*
+        version: link:../../shared/types
+
+  apps/agents:
+    dependencies:
+      '@nexora/lib':
+        specifier: workspace:*
+        version: link:../../shared/libraries
+      '@nexora/schemas':
+        specifier: workspace:*
+        version: link:../../shared/schemas
+      '@nexora/types':
+        specifier: workspace:*
+        version: link:../../shared/types
+
+  apps/api:
+    dependencies:
+      '@nexora/lib':
+        specifier: workspace:*
+        version: link:../../shared/libraries
+      '@nexora/schemas':
+        specifier: workspace:*
+        version: link:../../shared/schemas
+      '@nexora/types':
+        specifier: workspace:*
+        version: link:../../shared/types
+
+  apps/web:
+    dependencies:
+      '@nexora/lib':
+        specifier: workspace:*
+        version: link:../../shared/libraries
+      '@nexora/schemas':
+        specifier: workspace:*
+        version: link:../../shared/schemas
+      '@nexora/types':
+        specifier: workspace:*
+        version: link:../../shared/types
+
+  shared/libraries: {}
+
+  shared/schemas: {}
+
+  shared/types: {}
+
+packages:
+
+  typescript@6.0.3:
+    resolution: {integrity: sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw==}
+    engines: {node: '>=14.17'}
+    hasBin: true
+
+snapshots:
+
+  typescript@6.0.3: {}
