@@ -1,0 +1,4 @@
+networks:
+  nexora_net:
+    name: nexora_net
+    driver: bridge
