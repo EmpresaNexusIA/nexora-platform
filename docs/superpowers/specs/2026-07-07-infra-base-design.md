@@ -62,6 +62,10 @@ sub-proyecto 6.
   con repo propio en GitHub (org `EmpresaNexusIA`, nombre sugerido
   `nexora-platform`), separado de `Nexora - Bot`.
 - **Monorepo con pnpm workspaces (nuevo, ver justificación abajo).**
+- **`apps/api` es el API Gateway y único punto de entrada público del producto**
+  (web, admin, mobile futuro, integraciones, API pública futura). Orquesta y
+  aplica reglas de negocio, no concentra toda la lógica del sistema. Ver
+  [ADR-0006](../architecture/decisions/0006-api-gateway.md).
 
 ### Por qué pnpm workspaces para `apps/` y `shared/`
 
@@ -92,6 +96,58 @@ propio `package.json`, bajo el scope `@nexora/*` (`@nexora/types`,
 `@nexora/schemas`, `@nexora/lib`, `@nexora/api`, ...). Este sub-proyecto solo
 crea el esqueleto (paquetes vacíos que resuelven correctamente entre sí);
 el código real de cada app se construye en su sub-proyecto correspondiente.
+
+### Rol de `apps/api`: API Gateway (ADR-0006)
+
+`apps/api` es el **único componente con ruta pública en Traefik para tráfico
+de producto**. Todo cliente —panel admin, sitio web, apps móviles futuras,
+integraciones de terceros y la futura API pública— habla exclusivamente con
+`apps/api`. Ningún cliente externo toca Postgres, Qdrant, MinIO ni
+`apps/agents` directamente; `apps/api` los llama por red interna
+(`nexora_net`).
+
+**Por qué:**
+- **Aislamiento multi-tenant en un solo lugar.** El `tenant_id` + RLS
+  (ADR-0003) solo es tan seguro como el código que lo aplica. Centralizar esa
+  resolución evita reimplementar checks de autorización en cada app cliente.
+- **Preparado para integraciones sin rediseño.** Cuando aparezca la API
+  pública o una integración de terceros, no hay que exponer nada nuevo — el
+  gateway ya existe, versionado y con auth pensada para eso.
+- **`apps/agents` queda interno**, lo que permite escalarlo distinto del
+  resto de la API en el futuro (más CPU/memoria por ejecución de IA) sin que
+  el contrato público se entere.
+
+**Dos lineamientos de largo plazo (confirmados con el usuario):**
+
+1. **Orquestación y reglas de negocio, no todo el sistema.** `apps/api` se
+   organiza como *modular monolith* por dominio —
+   `apps/api/src/modules/{auth, tenants, bookings, agents-proxy, webhooks, billing}`—
+   cada uno con sus rutas/servicios/repositorio propios, comunicándose entre
+   sí solo a través de interfaces explícitas y de los contratos compartidos
+   en `@nexora/types` / `@nexora/schemas`. Los límites entre módulos son los
+   mismos por los que se cortaría si un dominio necesita convertirse en
+   servicio independiente el día de mañana — el contrato público
+   (`/v1/...`) no se entera de ese corte.
+2. **Versionado y documentación automática previstos desde el inicio.**
+   Todas las rutas se prefijan por versión (`/v1/...`) desde el primer
+   endpoint que se escriba, para que convivir con un futuro `/v2/...` sea
+   agregar, no migrar. La generación de documentación se hace vía
+   **OpenAPI/Swagger** (o equivalente) derivada de los mismos schemas de
+   `@nexora/schemas` (p.ej. Zod + `zod-to-openapi`), para que el contrato y
+   la doc nunca diverjan. No se implementa en este sub-proyecto — se define
+   la convención ahora para no tener que reordenar rutas más adelante.
+
+**Matiz:** n8n conserva su propia ruta en Traefik (editor + webhooks) porque
+no es superficie de API del producto — es una herramienta operativa con
+webhooks generados dinámicamente. Esto no viola el principio de punto único
+de entrada para el producto.
+
+**Alternativas descartadas:**
+- *Cada app habla directo con los servicios de datos* — multiplica puntos de
+  entrada y duplica lógica de tenant/autorización.
+- *Separar gateway y lógica de negocio en dos servicios ya* — agrega
+  complejidad operativa sin necesidad real todavía; los módulos internos ya
+  dejan esa puerta abierta.
 
 ## Arquitectura de la infra base
 
@@ -177,7 +233,8 @@ docs/architecture/decisions/
 ├── 0002-traefik-como-reverse-proxy.md
 ├── 0003-multi-tenant-schema-compartido-rls.md
 ├── 0004-pnpm-workspaces-monorepo.md
-└── 0005-alcance-multivertical.md
+├── 0005-alcance-multivertical.md
+└── 0006-api-gateway.md
 ```
 
 Plantilla (`0000-template.md`):
@@ -201,9 +258,10 @@ Opciones evaluadas y por qué no se eligieron.
 Qué mejora, qué se vuelve más difícil, qué queda pendiente a futuro.
 ```
 
-Este sub-proyecto crea la plantilla y los 5 ADR correspondientes a decisiones
+Este sub-proyecto crea la plantilla y los 6 ADR correspondientes a decisiones
 ya tomadas en este mismo diseño (Compose modular, Traefik, multi-tenant RLS,
-monorepo pnpm, alcance multivertical). A partir de acá, cada sub-proyecto
+monorepo pnpm, alcance multivertical, `apps/api` como API Gateway). A partir
+de acá, cada sub-proyecto
 agrega sus propios ADR cuando tome una decisión de arquitectura relevante —
 no todo cambio necesita uno, solo decisiones que costaría revertir.
 
@@ -212,7 +270,7 @@ no todo cambio necesita uno, solo decisiones que costaría revertir.
 ```
 Nexora - Platform/
 ├── apps/
-│   ├── api/            ← paquete @nexora/api (esqueleto, sub-proyecto 6)
+│   ├── api/            ← paquete @nexora/api — API Gateway (ADR-0006), esqueleto ahora, sub-proyecto 6
 │   ├── admin/           ← paquete @nexora/admin (esqueleto, sub-proyecto 6)
 │   ├── web/              ← paquete @nexora/web (esqueleto, sub-proyecto 6)
 │   └── agents/           ← paquete @nexora/agents (esqueleto, sub-proyecto 5)
@@ -256,7 +314,7 @@ Nexora - Platform/
 ├── docs/
 │   ├── 00-overview.md
 │   ├── architecture/
-│   │   └── decisions/     ← ADRs (0000-template.md, 0001..0005)
+│   │   └── decisions/     ← ADRs (0000-template.md, 0001..0006)
 │   ├── services/
 │   └── runbooks/
 ├── .github/
@@ -274,7 +332,7 @@ Nexora - Platform/
 Este sub-proyecto crea el esqueleto completo de carpetas y llena de contenido
 real: `infra/network/`, `infra/traefik/`, `scripts/`, `pnpm-workspace.yaml` +
 paquetes vacíos en `apps/*` y `shared/*`, `.github/workflows/ci.yml`, y los
-ADR 0001-0005. El contenido de negocio de cada carpeta (`infra/services/*`,
+ADR 0001-0006. El contenido de negocio de cada carpeta (`infra/services/*`,
 `ai/*`, código real de `apps/*`, `monitoring/*`, tests reales) se completa en
 sus sub-proyectos correspondientes.
 
@@ -309,7 +367,7 @@ en esa shell — mismo SO que el VPS de producción actual.
    `shared/*` (esqueleto), sin errores de dependencias.
 5. El workflow `.github/workflows/ci.yml` corre en verde en un PR de prueba
    (valida compose + lint).
-6. Existen los 6 archivos de `docs/architecture/decisions/` (plantilla + 5 ADR).
+6. Existen los 7 archivos de `docs/architecture/decisions/` (plantilla + 6 ADR).
 7. Estructura de carpetas completa, `.gitignore`, `README.md` y docs base
    commiteados en el repo nuevo (`nexora-platform`, org `EmpresaNexusIA`).
 
