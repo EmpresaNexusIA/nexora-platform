@@ -1,0 +1,6 @@
+tls:
+  stores:
+    default:
+      defaultCertificate:
+        certFile: /certs/nexora.localhost.pem
+        keyFile: /certs/nexora.localhost-key.pem
