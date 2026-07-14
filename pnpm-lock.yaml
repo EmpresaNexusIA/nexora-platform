@@ -60,6 +60,8 @@ importers:
         specifier: workspace:*
         version: link:../../shared/types
 
+  packages/database: {}
+
   shared/libraries: {}
 
   shared/schemas: {}
