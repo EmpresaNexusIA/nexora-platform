@@ -1,0 +1,22 @@
+{
+  "name": "@nexora/orchestrator",
+  "version": "1.0.0",
+  "description": "Nexora Platform Asynchronous Orchestration Motor",
+  "main": "dist/index.js",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts"
+  },
+  "dependencies": {
+    "pg": "^8.22.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.9",
+    "@types/pg": "^8.20.0",
+    "tsx": "^4.15.7",
+    "typescript": "^5.5.2"
+  }
+}
