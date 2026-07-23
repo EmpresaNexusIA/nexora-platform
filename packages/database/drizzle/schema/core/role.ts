@@ -1,6 +1,6 @@
 import { pgTable, uuid, varchar } from "drizzle-orm/pg-core";
-import { tenants } from "./tenant";
-import { primaryKeyUuidV7, auditFields } from "./helpers";
+import { tenants } from "./tenant.js";
+import { primaryKeyUuidV7, auditFields } from "./helpers.js";
 
 export const roles = pgTable("roles", {
   ...primaryKeyUuidV7,

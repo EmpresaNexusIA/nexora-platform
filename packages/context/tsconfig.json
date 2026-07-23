@@ -1,8 +1,8 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "rootDir": ".",
+    "rootDir": "./src",
     "outDir": "./dist"
   },
-  "include": ["src", "drizzle/schema"]
+  "include": ["src"]
 }

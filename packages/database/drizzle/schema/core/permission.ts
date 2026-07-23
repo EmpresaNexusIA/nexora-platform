@@ -1,5 +1,5 @@
 import { pgTable, varchar } from "drizzle-orm/pg-core";
-import { primaryKeyUuidV7, auditFields } from "./helpers";
+import { primaryKeyUuidV7, auditFields } from "./helpers.js";
 
 export const permissions = pgTable("permissions", {
   ...primaryKeyUuidV7,
