@@ -11,7 +11,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Mostrar versión de Docker Compose
+      - name: Mostrar version de Docker Compose
         run: docker compose version
 
       - name: Validar sintaxis de cada compose.yaml por separado
@@ -22,7 +22,7 @@ jobs:
             docker compose -f "$file" config -q
           done
 
-      - name: Validar el orquestador raíz (resuelve include: y interpolación cruzada)
+      - name: Validar el orquestador raiz (resuelve include: e interpolacion cruzada)
         run: docker compose -f infra/compose.yaml config -q
 
   lint:
@@ -31,6 +31,8 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
+        with:
+          version: 11.10.0
 
       - uses: actions/setup-node@v4
         with:
