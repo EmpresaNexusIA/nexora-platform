@@ -22,7 +22,7 @@ jobs:
             docker compose -f "$file" config -q
           done
 
-      - name: Validar el orquestador raiz (resuelve include: e interpolacion cruzada)
+      - name: Validar el orquestador raiz (include e interpolacion cruzada)
         run: docker compose -f infra/compose.yaml config -q
 
   lint:
