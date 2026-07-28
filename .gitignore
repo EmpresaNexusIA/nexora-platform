@@ -14,3 +14,7 @@ logs/*
 
 infra/traefik/certs/*
 !infra/traefik/certs/.gitkeep
+
+# Scaffolding de proceso (no versionar)
+.superpowers/
+docs/superpowers/plans/
