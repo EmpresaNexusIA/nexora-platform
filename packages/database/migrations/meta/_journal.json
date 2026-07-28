@@ -15,6 +15,13 @@
       "when": 1784163120185,
       "tag": "0001_nasty_lady_mastermind",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785207638047,
+      "tag": "0002_sp2_machinery",
+      "breakpoints": true
     }
   ]
 }
