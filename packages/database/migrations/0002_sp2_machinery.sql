@@ -14,9 +14,9 @@
 --     y también instala desde cero en un clon fresco.
 --   * Roles api_user / nexora_maintenance_role se crean SIN login/password:
 --     la provisión de credenciales es por entorno (secrets), no por migración.
---   * Formato: incluye --> statement-breakpoint entre statements (formato
---     canónico de drizzle-kit; sin ellos un archivo custom puede ejecutarse
---     parcialmente y en silencio — causa raíz del incidente 2026-07-28).
+--   * Formato: usa los separadores de statements al estilo de drizzle-kit
+--     (sin ellos un archivo custom puede ejecutarse parcialmente y en silencio
+--     — causa raíz del incidente 2026-07-28, documentado en el reporte).
 -- ============================================================================
 
 -- 1) Extensión criptográfica (uuid v4/v7, bytes aleatorios) -------------------
