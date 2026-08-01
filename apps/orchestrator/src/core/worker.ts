@@ -16,10 +16,10 @@ export class OutboxWorker {
       this.logger.warn('Worker rechazando evento: deteniéndose.');
       throw new Error('Worker shutting down');
     }
-
     this.activeJobs++;
-    const context = CorrelationContext.generate(rawEvent.id, rawEvent.tenantId);
-
+    // FIX SP3: el tenant vive dentro del payload del evento (audit.outbox no
+    // tiene columna tenant_id). Antes se leía rawEvent.tenantId -> siempre undefined.
+    const context = CorrelationContext.generate(rawEvent.id, rawEvent.payload?.tenantId);
     this.logger.info('Iniciando procesamiento de evento.', {
       eventId: context.eventId,
       traceId: context.traceId,
@@ -52,16 +52,13 @@ export class OutboxWorker {
     this.logger.info('Deteniendo worker...', {
       activeJobs: this.activeJobs
     });
-
     this.running = false;
-
     while (this.activeJobs > 0) {
       this.logger.info('Esperando tareas activas...', {
         activeJobs: this.activeJobs
       });
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
-    
     this.logger.info('Worker detenido correctamente.', {
       activeJobs: this.activeJobs
     });

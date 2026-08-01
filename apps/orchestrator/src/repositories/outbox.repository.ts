@@ -67,8 +67,11 @@ export class OutboxRepository {
          VALUES ($1, $2, $3, $4, $5)`,
         [event.id, event.eventType, JSON.stringify(event.payload), errorCategory, errorLog]
       );
+      // FIX SP3: un evento que ya vive en la DLQ queda DEAD_LETTER (el enum
+      // audit.outbox_status lo contempla). Antes quedaba FAILED, que sugiere
+      // "falló" en vez de "murió" y ensucia la observabilidad.
       await client.query(
-        `UPDATE audit.outbox SET status = 'FAILED'::audit.outbox_status, error_log = $2, completed_at = now() WHERE id = $1`,
+        `UPDATE audit.outbox SET status = 'DEAD_LETTER'::audit.outbox_status, error_log = $2, completed_at = now() WHERE id = $1`,
         [event.id, errorLog]
       );
       await client.query('COMMIT');

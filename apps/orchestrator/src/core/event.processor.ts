@@ -13,15 +13,17 @@ export class EventProcessor {
 
   async process(event: any): Promise<void> {
     const startTime = Date.now();
+    // FIX SP3: handler se lee de event.eventType (el campo real del OutboxEvent,
+    // ver types/outbox.types.ts) y tenantId se deriva del payload, porque
+    // audit.outbox no tiene columna tenant_id de primer nivel.
     const context = {
       eventId: event.id,
-      tenantId: event.tenantId,
-      handler: event.type
+      tenantId: event.tenantId ?? event.payload?.tenantId,
+      handler: event.eventType
     };
 
     try {
       this.metrics.incrementProcessed();
-
       // Idempotencia canónica (services/ + repositories/): clave (event_id, handler_name)
       // sobre orchestrator.idempotency_keys, con ON CONFLICT por la unique compuesta.
       // NOTA: la versión fósil en core/ esperaba columnas inexistentes
