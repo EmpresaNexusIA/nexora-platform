@@ -1,4 +1,5 @@
 import { Pool } from 'pg';
+import { TelegramNotifier } from './telegram.notifier.js';
 
 interface LoggerLike {
   info(message: string, meta?: unknown): void;
@@ -13,15 +14,15 @@ export interface DeadLetterSighting {
 }
 
 /**
- * 👁️ El Ojo — Empleado #0, fase A1.
+ * 👁️ El Ojo v2 — Empleado #0, fase A1 (canal Telegram A1.1 enchufado).
  *
  * Cada `intervalMs` mira la mesa de autopsias (orchestrator.dead_letter_queue):
  *   - 0 muertos          → silencio (la paz reina).
- *   - muertos NUEVOS (vs. última ronda) → LADRIDO (logger.warn) con el
- *     resumen de los últimos 5 (tipo de evento, causa, cuándo).
+ *   - muertos NUEVOS (vs. última ronda) → LADRIDO local (logger.warn) y,
+ *     si hay mensajero, AVISO POR TELEGRAM al bolsillo del fundador 📱.
  *
- * REGLA A1: MIRA Y AVISA. Nunca escribe, nunca limpia, nunca reintenta
- * (tocar la DLQ es A2; curar es A3).
+ * REGLA A1: MIRA Y AVISA. Nunca escribe, nunca limpia (eso es A2/A3).
+ * Si Telegram falla, no pasa nada: el ladrido local quedó.
  */
 export class DlQWatchman {
   private timer: NodeJS.Timeout | null = null;
@@ -30,7 +31,8 @@ export class DlQWatchman {
   constructor(
     private readonly db: Pool,
     private readonly logger: LoggerLike,
-    private readonly intervalMs: number = 300_000 // 5 minutos
+    private readonly intervalMs: number = 300_000,
+    private readonly notifier: TelegramNotifier | null = null
   ) {}
 
   /** Arranca la vigilancia periódica (idempotente: dos start no duplican). */
@@ -43,7 +45,10 @@ export class DlQWatchman {
         })
       );
     }, this.intervalMs);
-    this.logger.info('[DlqWatchman] 👁️ en vigilancia', { cadaMs: this.intervalMs });
+    this.logger.info('[DlqWatchman] 👁️ en vigilancia', {
+      cadaMs: this.intervalMs,
+      telegram: this.notifier ? 'on' : 'mudo',
+    });
   }
 
   /** Detiene la vigilancia (apagado limpio). */
@@ -71,11 +76,26 @@ export class DlQWatchman {
          ORDER BY failed_at DESC
          LIMIT 5`
       );
+
       this.logger.warn('[DlqWatchman] 🚨 MUERTO(S) NUEVO(S) en la DLQ', {
         total: current,
         nuevos: current - this.lastSeenCount,
         ultimos: latest.rows,
       });
+
+      if (this.notifier) {
+        const u = latest.rows[0];
+        const texto = [
+          '🚨 NEXORA — Muerto(s) en la DLQ',
+          `Total: ${current} · Nuevos: ${current - this.lastSeenCount}`,
+          `Último: ${u?.eventType ?? '-'} · ${u?.errorCategory ?? '-'}`,
+        ].join('\n');
+        this.notifier.send(texto).catch((err) =>
+          this.logger.warn('[DlqWatchman] aviso Telegram falló (el ladrido local quedó)', {
+            error: String(err),
+          })
+        );
+      }
     }
 
     this.lastSeenCount = current;
