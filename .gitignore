@@ -18,3 +18,4 @@ infra/traefik/certs/*
 # Scaffolding de proceso (no versionar)
 .superpowers/
 docs/superpowers/plans/
+package-lock.json
