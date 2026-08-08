@@ -19,3 +19,6 @@ infra/traefik/certs/*
 .superpowers/
 docs/superpowers/plans/
 package-lock.json
+
+# Certificados locales mkcert (F2) - NUNCA al repo
+*.pem
