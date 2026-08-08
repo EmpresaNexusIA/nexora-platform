@@ -3,3 +3,5 @@ include:
   - traefik/compose.yaml
   - postgres/compose.yaml
   - services/whoami/compose.yaml
+
+  - redis/compose.yaml

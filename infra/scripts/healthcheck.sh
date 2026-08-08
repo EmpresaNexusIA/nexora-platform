@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # ============================================================
-#  🩺 healthcheck.sh — EMPLEADO #0 (fase A0) · NEXORA
-#  El médico de guardia: 7 chequeos en ~30 segundos.
+#  🩺 healthcheck.sh — EMPLEADO #0 · NEXORA
+#  El médico de guardia: 8 chequeos en ~30 segundos.
 #  Filosofía: MIRAR E INFORMAR (cero riesgo).
 #  Única acción permitida: auto-curar traefik caído (el mantra).
+#  v2 (F5-R1): la familia crece — 4 contenedores esperados
+#              (se suma nexora-redis) + chequeo 8: Redis PONG.
 #  Uso:   bash healthcheck.sh
 #  Salida: ✓/✗ por órgano + exit code = nº de fallas (0 = sano).
 # ============================================================
@@ -13,7 +15,7 @@ set -u
 # ---- Verdades del organismo (solo cambian tras un transplante) ----
 DNI_ESPERADO="7670634338808201248"
 PULSO_ESPERADO="3|0|6|6|3"
-ESPERADOS="nexora-postgres nexora_traefik nexora_whoami"
+ESPERADOS="nexora-postgres nexora_traefik nexora_whoami nexora-redis"
 
 OKS=0
 FALLAS=0
@@ -39,7 +41,7 @@ if docker ps -a --format "{{.Names}}" 2>/dev/null | grep -qx "nexora_traefik" \
   sleep 3
 fi
 
-# ---- 2. Los 3 y solo los 3 (REGLA MUSEO) -----------------------------
+# ---- 2. Los 4 y solo los 4 (REGLA MUSEO + familia F5) ----------------
 FALTAN=""
 for C in $ESPERADOS; do
   docker ps --format "{{.Names}}" 2>/dev/null | grep -qx "$C" || FALTAN="$FALTAN $C"
@@ -48,9 +50,9 @@ EXTRAS=$(comm -13 <(printf "%s\n" $ESPERADOS | sort) \
                  <(docker ps --format "{{.Names}}" 2>/dev/null | sort) | tr "\n" " ")
 if [ -z "$FALTAN" ]; then
   if [ -z "$EXTRAS" ]; then
-    tildar "2. Contenedores: los 3 y solo los 3 (museo respetado)"
+    tildar "2. Contenedores: los 4 y solo los 4 (museo respetado)"
   else
-    tildar "2. Contenedores: los 3 arriba (⚠ ojo, extra(s) corriendo:$EXTRAS)"
+    tildar "2. Contenedores: los 4 arriba (⚠ ojo, extra(s) corriendo:$EXTRAS)"
   fi
 else
   cruzar "2. Faltan contenedores:$FALTAN"
@@ -98,6 +100,13 @@ if [ "${DISCO:-100}" -lt 80 ] && [ "${RAMDISP:-0}" -gt 1024 ]; then
   tildar "7. Recursos holgados: $DETALLE"
 else
   cruzar "7. Recursos justos: $DETALLE"
+fi
+
+# ---- 8. Redis por dentro (PONG con clave) --------------------------------
+if docker exec nexora-redis sh -c "redis-cli --no-auth-warning -a \"\$REDIS_PASSWORD\" ping" 2>/dev/null | grep -q PONG; then
+  tildar "8. Redis por dentro: PONG (el anotador responde y pide clave)"
+else
+  cruzar "8. Redis por dentro: no responde o falta REDIS_PASSWORD"
 fi
 
 # ---- Diagnóstico final ---------------------------------------------------
