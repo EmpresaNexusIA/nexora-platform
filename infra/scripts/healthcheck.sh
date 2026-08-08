@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # ============================================================
 #  🩺 healthcheck.sh — EMPLEADO #0 · NEXORA
-#  El médico de guardia: 9 chequeos en ~30 segundos.
+#  El médico de guardia: 10 chequeos en ~35 segundos.
 #  Filosofía: MIRAR E INFORMAR (cero riesgo).
 #  Única acción permitida: auto-curar traefik caído (el mantra).
-#  v3 (F5-R2 MinIO): familia de 5 (se suma nexora-minio)
-#                    + chequeo 9: MinIO health/live.
-#  v2 (F5-R1 Redis): familia de 4 + chequeo 8: Redis PONG.
+#  v4 (F5 Qdrant): ¡LA FAMILIA COMPLETA! 6 contenedores
+#                  esperados (se suma nexora-qdrant) + chequeo 10.
+#  v3 (F5 MinIO):  familia de 5 + chequeo 9: MinIO health/live.
+#  v2 (F5 Redis):  familia de 4 + chequeo 8: Redis PONG.
 #  Uso:   bash healthcheck.sh
 #  Salida: ✓/✗ por órgano + exit code = nº de fallas (0 = sano).
 # ============================================================
@@ -16,7 +17,7 @@ set -u
 # ---- Verdades del organismo (solo cambian tras un transplante) ----
 DNI_ESPERADO="7670634338808201248"
 PULSO_ESPERADO="3|0|6|6|3"
-ESPERADOS="nexora-postgres nexora_traefik nexora_whoami nexora-redis nexora-minio"
+ESPERADOS="nexora-postgres nexora_traefik nexora_whoami nexora-redis nexora-minio nexora-qdrant"
 
 OKS=0
 FALLAS=0
@@ -42,7 +43,7 @@ if docker ps -a --format "{{.Names}}" 2>/dev/null | grep -qx "nexora_traefik" \
   sleep 3
 fi
 
-# ---- 2. Los 5 y solo los 5 (REGLA MUSEO + familia F5) ----------------
+# ---- 2. Los 6 y solo los 6 (REGLA MUSEO + familia F5 completa) -------
 FALTAN=""
 for C in $ESPERADOS; do
   docker ps --format "{{.Names}}" 2>/dev/null | grep -qx "$C" || FALTAN="$FALTAN $C"
@@ -51,9 +52,9 @@ EXTRAS=$(comm -13 <(printf "%s\n" $ESPERADOS | sort) \
                  <(docker ps --format "{{.Names}}" 2>/dev/null | sort) | tr "\n" " ")
 if [ -z "$FALTAN" ]; then
   if [ -z "$EXTRAS" ]; then
-    tildar "2. Contenedores: los 5 y solo los 5 (museo respetado)"
+    tildar "2. Contenedores: los 6 y solo los 6 (museo respetado)"
   else
-    tildar "2. Contenedores: los 5 arriba (⚠ ojo, extra(s) corriendo:$EXTRAS)"
+    tildar "2. Contenedores: los 6 arriba (⚠ ojo, extra(s) corriendo:$EXTRAS)"
   fi
 else
   cruzar "2. Faltan contenedores:$FALTAN"
@@ -117,6 +118,15 @@ if [ "$MCODIGO" = "200" ]; then
   tildar "9. MinIO por dentro: vivo y atendiendo (health/live 200)"
 else
   cruzar "9. MinIO por dentro: no responde (HTTP $MCODIGO)"
+fi
+
+# ---- 10. Qdrant por dentro (healthz) ---------------------------------------
+QCODIGO=$(curl -s -o /dev/null -w "%{http_code}" --max-time 3 http://127.0.0.1:6333/healthz 2>/dev/null)
+[ -z "$QCODIGO" ] && QCODIGO="000"
+if [ "$QCODIGO" = "200" ]; then
+  tildar "10. Qdrant por dentro: vivo (healthz 200 — la biblioteca abre)"
+else
+  cruzar "10. Qdrant por dentro: no responde (HTTP $QCODIGO)"
 fi
 
 # ---- Diagnóstico final ---------------------------------------------------

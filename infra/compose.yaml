@@ -5,5 +5,5 @@ include:
   - services/whoami/compose.yaml
 
   - redis/compose.yaml
-
   - minio/compose.yaml
+  - qdrant/compose.yaml
