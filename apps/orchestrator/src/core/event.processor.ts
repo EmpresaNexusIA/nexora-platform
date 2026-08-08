@@ -2,8 +2,17 @@ import { Logger } from './logger.js';
 import { MetricsCollector } from './metrics.collector.js';
 import { EventDispatcher } from './event.dispatcher.js';
 import { IdempotencyService } from '../services/idempotency.service.js';
+import { OutboxEvent } from '../types/outbox.types.js';
+
+/**
+ * Evento tal como viaja por el procesador F3 (2026-08-07):
+ * el OutboxEvent canonico + el tenantId que el Worker le funde
+ * encima via CorrelationContext (audit.outbox no tiene esa columna).
+ */
+type EventoProcesable = OutboxEvent & { tenantId?: string };
 
 export class EventProcessor {
+
   constructor(
     private readonly logger: Logger,
     private readonly metrics: MetricsCollector,
@@ -11,8 +20,9 @@ export class EventProcessor {
     private readonly idempotency: IdempotencyService
   ) {}
 
-  async process(event: any): Promise<void> {
+  async process(event: EventoProcesable): Promise<void> {
     const startTime = Date.now();
+
     // FIX SP3: handler se lee de event.eventType (el campo real del OutboxEvent,
     // ver types/outbox.types.ts) y tenantId se deriva del payload, porque
     // audit.outbox no tiene columna tenant_id de primer nivel.
@@ -24,10 +34,9 @@ export class EventProcessor {
 
     try {
       this.metrics.incrementProcessed();
+
       // Idempotencia canónica (services/ + repositories/): clave (event_id, handler_name)
       // sobre orchestrator.idempotency_keys, con ON CONFLICT por la unique compuesta.
-      // NOTA: la versión fósil en core/ esperaba columnas inexistentes
-      // (idempotency_key, created_at) y fallaba en silencio descartando todos los eventos.
       const handlerName =
         this.dispatcher.getHandlerName(event.eventType) ?? event.eventType;
       const isNew = await this.idempotency.isUniqueAndRegister(event, handlerName);
@@ -39,10 +48,12 @@ export class EventProcessor {
 
       await this.dispatcher.dispatch(event);
       this.metrics.incrementSuccess();
+
       this.logger.info('Evento procesado exitosamente.', {
         ...context,
         durationMs: Date.now() - startTime
       });
+
     } catch (error: any) {
       this.metrics.incrementFailure();
       this.logger.error('Error procesando evento.', error, context);

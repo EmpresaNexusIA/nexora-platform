@@ -1,8 +1,10 @@
 import { Logger } from './logger.js';
 import { EventProcessor } from './event.processor.js';
 import { CorrelationContext } from './correlation.context.js';
+import { OutboxEvent } from '../types/outbox.types.js';
 
 export class OutboxWorker {
+
   private running: boolean = true;
   private activeJobs: number = 0;
 
@@ -11,15 +13,18 @@ export class OutboxWorker {
     private readonly processor: EventProcessor
   ) {}
 
-  async handleEvent(rawEvent: any): Promise<void> {
+  async handleEvent(rawEvent: OutboxEvent): Promise<void> {
     if (!this.running && this.activeJobs === 0) {
       this.logger.warn('Worker rechazando evento: deteniéndose.');
       throw new Error('Worker shutting down');
     }
+
     this.activeJobs++;
+
     // FIX SP3: el tenant vive dentro del payload del evento (audit.outbox no
     // tiene columna tenant_id). Antes se leía rawEvent.tenantId -> siempre undefined.
     const context = CorrelationContext.generate(rawEvent.id, rawEvent.payload?.tenantId);
+
     this.logger.info('Iniciando procesamiento de evento.', {
       eventId: context.eventId,
       traceId: context.traceId,
@@ -29,12 +34,14 @@ export class OutboxWorker {
     try {
       this.running = true;
       await this.processor.process({ ...rawEvent, ...context });
+
     } catch (error: any) {
       this.logger.error('Error crítico en Worker.', error, {
         eventId: context.eventId,
         traceId: context.traceId
       });
       throw error;
+
     } finally {
       this.activeJobs--;
     }
@@ -52,13 +59,16 @@ export class OutboxWorker {
     this.logger.info('Deteniendo worker...', {
       activeJobs: this.activeJobs
     });
+
     this.running = false;
+
     while (this.activeJobs > 0) {
       this.logger.info('Esperando tareas activas...', {
         activeJobs: this.activeJobs
       });
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
+
     this.logger.info('Worker detenido correctamente.', {
       activeJobs: this.activeJobs
     });
