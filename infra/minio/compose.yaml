@@ -1,0 +1,37 @@
+name: nexora-minio
+
+services:
+  minio:
+    image: minio/minio:latest
+    container_name: nexora-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?falta_MINIO_ROOT_USER_en_.env}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?falta_MINIO_ROOT_PASSWORD_en_.env}
+    command:
+      - server
+      - /data
+      - --console-address
+      - ":9001"
+    mem_limit: 256m
+    ports:
+      - "127.0.0.1:${MINIO_PORT:-9000}:9000"
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - nexora_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+volumes:
+  minio_data:
+    name: nexora_minio_data
+
+networks:
+  nexora_net:
+    external: true
