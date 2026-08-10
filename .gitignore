@@ -22,3 +22,6 @@ package-lock.json
 
 # Certificados locales mkcert (F2) - NUNCA al repo
 *.pem
+
+# Offset del Encargado (A1.2) - estado local, no va al repo
+.encargado-offset.json
