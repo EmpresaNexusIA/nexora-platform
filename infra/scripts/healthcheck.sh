@@ -6,6 +6,11 @@
 #  Única acción permitida: auto-curar traefik caído (el mantra).
 #  v4 (F5 Qdrant): ¡LA FAMILIA COMPLETA! 6 contenedores
 #                  esperados (se suma nexora-qdrant) + chequeo 10.
+#  v5 (A3, 10/8):  el pulso cuenta la DLQ SOLO sin resolver
+#                  (resolved_at IS NULL) — los enterrados por el
+#                  Encargado ya no inflan el cementerio. PULSO_ESPERADO
+#                  pasa a 3|0|6|6|4 cuando la migración 0003 quede
+#                  registrada en el journal (commit final del A3).
 #  v3 (F5 MinIO):  familia de 5 + chequeo 9: MinIO health/live.
 #  v2 (F5 Redis):  familia de 4 + chequeo 8: Redis PONG.
 #  Uso:   bash healthcheck.sh
@@ -16,7 +21,7 @@ set -u
 
 # ---- Verdades del organismo (solo cambian tras un transplante) ----
 DNI_ESPERADO="7670634338808201248"
-PULSO_ESPERADO="3|0|6|6|3"
+PULSO_ESPERADO="3|0|6|6|4"  # → 3|0|6|6|4 tras registrar 0003 en el journal (commit A3)
 ESPERADOS="nexora-postgres nexora_traefik nexora_whoami nexora-redis nexora-minio nexora-qdrant"
 
 OKS=0
@@ -78,7 +83,7 @@ fi
 
 # ---- 5. Pulso sagrado ---------------------------------------------------
 PULSO=$(docker exec -i nexora-postgres psql -U nexora_admin -d nexora_dev -t -A \
-      -c "select (select count(*) from audit.outbox), (select count(*) from orchestrator.dead_letter_queue), (select count(*) from pg_trigger where not tgisinternal), (select count(*) from pg_policy), (select count(*) from drizzle.__drizzle_migrations)" 2>/dev/null)
+      -c "select (select count(*) from audit.outbox), (select count(*) from orchestrator.dead_letter_queue where resolved_at is null), (select count(*) from pg_trigger where not tgisinternal), (select count(*) from pg_policy), (select count(*) from drizzle.__drizzle_migrations)" 2>/dev/null)
 if [ "$PULSO" = "$PULSO_ESPERADO" ]; then
   tildar "5. Pulso sagrado: $PULSO ✓ (memoria intacta)"
 else

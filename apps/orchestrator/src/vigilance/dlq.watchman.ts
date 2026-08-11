@@ -14,12 +14,17 @@ export interface DeadLetterSighting {
 }
 
 /**
- * 👁️ El Ojo v2 — Empleado #0, fase A1 (canal Telegram A1.1 enchufado).
+ * 👁️ El Ojo v3 — Empleado #0, fase A1 (canal Telegram A1.1 enchufado).
  *
  * Cada `intervalMs` mira la mesa de autopsias (orchestrator.dead_letter_queue):
  *   - 0 muertos          → silencio (la paz reina).
  *   - muertos NUEVOS (vs. última ronda) → LADRIDO local (logger.warn) y,
  *     si hay mensajero, AVISO POR TELEGRAM al bolsillo del fundador 📱.
+ *
+ * v3 (A3, 10/8): solo cuenta muertos NO resueltos (resolved_at IS NULL).
+ * Antes contaba todos, y un muerto enterrado por el Encargado seguía
+ * inflando el pulso — el cementerio mentía. Ahora el Ojo y la mesa
+ * hablan el mismo idioma.
  *
  * REGLA A1: MIRA Y AVISA. Nunca escribe, nunca limpia (eso es A2/A3).
  * Si Telegram falla, no pasa nada: el ladrido local quedó.
@@ -59,10 +64,12 @@ export class DlQWatchman {
     }
   }
 
-  /** Una ronda de vigilancia. Devuelve la cuenta actual de muertos. */
+  /** Una ronda de vigilancia. Devuelve la cuenta actual de muertos SIN resolver. */
   async checkOnce(): Promise<number> {
     const countRes = await this.db.query<{ count: string }>(
-      'SELECT count(*)::text AS count FROM orchestrator.dead_letter_queue'
+      `SELECT count(*)::text AS count
+         FROM orchestrator.dead_letter_queue
+        WHERE resolved_at IS NULL`
     );
     const current = Number(countRes.rows[0]?.count ?? '0');
 
@@ -73,6 +80,7 @@ export class DlQWatchman {
                 error_category AS "errorCategory",
                 failed_at      AS "failedAt"
          FROM orchestrator.dead_letter_queue
+         WHERE resolved_at IS NULL
          ORDER BY failed_at DESC
          LIMIT 5`
       );
