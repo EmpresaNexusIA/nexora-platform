@@ -3,17 +3,15 @@ import { Pool } from 'pg';
 import { DlQWatchman } from './vigilance/dlq.watchman.js';
 import { createTelegramNotifier } from './vigilance/telegram.notifier.js';
 import { crearEncargado } from './encargado/telegram.listener.js';
-
-// ... otros imports existentes ...
+import { crearEngine } from './core/engine.js';
+import { Logger } from './core/logger.js';
 
 const dispatcher = new EventDispatcher();
 
 // Registro condicional para suite de validación
 
 if (process.env.NODE_ENV === 'test') {
-
-  console.log("[Testing] Registrando TestHandler para suite de validación");
-
+  console.log('[Testing] Registrando TestHandler para suite de validación');
 }
 
 // ============================================================
@@ -129,6 +127,35 @@ if (process.env.ENCARGADO === 'on' && process.env.NODE_ENV !== 'test') {
   }
 } else {
   console.log('🧔 Encargado (A1.2) en reposo — prender con ENCARGADO=on');
+}
+
+// ============================================================
+// 🚂 EL MOTOR SP3 — la ignición que faltaba (llave WORKER=on)
+// El motor (Worker, Processor, RetryManager, Idempotencia) ya existía
+// pero nunca se instanciaba: index.ts era un andamio. Ahora se enciende
+// con su propia llave, apagado por defecto (regla de la casa: ni CI ni
+// arranques accidentales quedan colgados).
+//   WORKER=on pnpm exec tsx --env-file ../../.env src/index.ts
+// Opcionales: WORKER_BATCH (10) · WORKER_INTERVAL_MS (5000)
+// ============================================================
+
+if (process.env.WORKER === 'on' && process.env.NODE_ENV !== 'test') {
+  const pool = new Pool({
+    connectionString:
+      process.env.DATABASE_URL ??
+      'postgresql://nexora_admin:nexora_pass_dev_123@localhost:5432/nexora_dev',
+  });
+  const logger = new Logger();
+  const engine = crearEngine(pool, logger);
+  engine.start();
+  console.log('🚂 Motor SP3: ENCENDIDO (worker real leyendo el outbox).');
+  alApagar.push(async (): Promise<void> => {
+    await engine.stop();
+    await pool.end();
+    console.log('🚂 Motor: apagado, base despedida.');
+  });
+} else {
+  console.log('🚂 Motor SP3 en reposo — prender con WORKER=on');
 }
 
 // ... resto de tu inicialización ...
