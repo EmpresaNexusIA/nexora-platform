@@ -1,13 +1,14 @@
 /**
- * 🧔 EL ENCARGADO — A3 (paso 2 de F6): la gramática v3.
+ * 🧔 EL ENCARGADO — la gramática v4 (con el CRM del fundador).
  *
  * Reglas, SIN IA: cero sorpresas. Lo que no sabe, lo dice honesto.
- * Solo-lectura por construcción SALVO las acciones aprobadas por el
- * fundador (A3 = humano en el loop): /enterrar y /reintentar ejecutan
- * SOLO con ✅, todo transaccional y auditado en el prontuario.
+ * Solo-lectura sobre el ORGANISMO salvo las acciones aprobadas (A3).
+ * El CRM (public.clientes) es herramienta del DUEÑO: solo el chat del
+ * fundador (whitelist) puede usarlo — no es acción autónoma del empleado.
  *
  * Parto 1: /ayuda + /estado · Parto 2: /busca /traeme /donde.
- * Paso 2 (A3): /muertos /enterrar /reintentar /prontuario + ✅/❌.
+ * A3: /muertos /enterrar /reintentar /prontuario + si/no.
+ * v4: /clientes /nuevo-cliente /cliente /cliente-estado (CRM).
  *
  * Nota: las consultas corren secuenciales; si alguna tarda (timeout),
  * la oreja atiende la siguiente igual. Todo resuelve un mensaje.
@@ -29,15 +30,24 @@ import {
 } from './acciones.js';
 import { proponer, responder } from './aprobacion.js';
 import type { Pedido } from './aprobacion.js';
+import {
+  listarClientes,
+  nuevoCliente,
+  detalleCliente,
+  cambiarEstadoCliente,
+} from './clientes.js';
 import { Client } from 'pg';
 
-const CARTA = `🧔 Encargado del taller — esto sé hacer (v3):
+const CARTA = `🧔 Encargado del taller — esto sé hacer (v4):
 
 /estado — parte del organismo (pulso, cuartos, recursos)
 /muertos — ⚰️ el cementerio (sin resolver)
-/enterrar <id> — ⚰️ propone enterrar (con tu ✅)
-/reintentar <id> — 🔄 propone revivir (con tu ✅)
+/enterrar <id> · /reintentar <id> — acciones con tu si/no
 /prontuario — 📜 acciones y su resultado
+/clientes — 🗂️ la lista de clientes
+/nuevo-cliente <nombre> | <rubro> | <tel> — 🗂️ agregar
+/cliente <nombre> — 🗂️ ficha completa
+/cliente-estado <nombre> <estado> — 🗂️ mover de etapa
 /busca · /traeme · /donde — los cuartos
 /ayuda — esta carta`;
 
@@ -71,6 +81,30 @@ export async function manejarComando(texto: string): Promise<string> {
     const v = await verificarResultadosPendientes();
     const p = await verProntuario();
     return v ? `${v}\n\n${p}` : p;
+  }
+  if (comando === '/clientes') {
+    return await listarClientes();
+  }
+  if (comando.startsWith('/nuevo-cliente')) {
+    const arg = limpio.slice('/nuevo-cliente'.length).trim();
+    if (!arg) return '📝 Para /nuevo-cliente: /nuevo-cliente <nombre> | <rubro> | <teléfono>';
+    return await nuevoCliente(arg);
+  }
+  if (comando.startsWith('/cliente-estado')) {
+    const arg = limpio.slice('/cliente-estado'.length).trim();
+    // formato: <nombre o id> <estado> — el estado es la ÚLTIMA palabra
+    const ultimoEspacio = arg.lastIndexOf(' ');
+    if (ultimoEspacio <= 0) {
+      return '📝 Para /cliente-estado: /cliente-estado <nombre> <estado> (nuevo|contactado|presupuestando|vendido|activo)';
+    }
+    const termino = arg.slice(0, ultimoEspacio).trim();
+    const estado = arg.slice(ultimoEspacio + 1).trim();
+    return await cambiarEstadoCliente(termino, estado);
+  }
+  if (comando.startsWith('/cliente')) {
+    const arg = limpio.slice('/cliente'.length).trim();
+    if (!arg) return '🗂️ Para /cliente: /cliente <nombre o id>';
+    return await detalleCliente(arg);
   }
   if (comando.startsWith('/enterrar')) {
     const arg = limpio.slice('/enterrar'.length).trim();
