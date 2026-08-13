@@ -19,11 +19,11 @@ jobs:
           set -e
           find . -name "compose.yaml" -not -path "*/node_modules/*" | while read -r file; do
             echo "Validando $file"
-            docker compose -f "$file" config -q
+            docker compose -f "$file" --env-file .env.ci config -q
           done
 
       - name: Validar el orquestador raiz (include e interpolacion cruzada)
-        run: docker compose -f infra/compose.yaml config -q
+        run: docker compose -f infra/compose.yaml --env-file .env.ci config -q
 
   lint:
     runs-on: ubuntu-latest
