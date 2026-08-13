@@ -21,7 +21,7 @@ set -u
 
 # ---- Verdades del organismo (solo cambian tras un transplante) ----
 DNI_ESPERADO="7670634338808201248"
-PULSO_ESPERADO="3|0|6|7|6"  # pulso tras 0005 (commit d74673a, MT E2E certificado)
+PULSO_ESPERADO="3|0|6|7|7"  # pulso tras 0006 (commit 0c570d1, password_hash + login)
 ESPERADOS="nexora-postgres nexora_traefik nexora_whoami nexora-redis nexora-minio nexora-qdrant"
 
 OKS=0
