@@ -36,6 +36,13 @@
       "when": 1786544994042,
       "tag": "0004_crm_clientes",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1786631394042,
+      "tag": "0005_grant_api_user_multitenant",
+      "breakpoints": true
     }
   ]
 }
