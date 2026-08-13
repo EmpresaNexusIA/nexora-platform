@@ -6,7 +6,11 @@
 #  verifica que su sha256 matchee el esperado. Si no matchea,
 #  avisa y NO copia — evita que se pegue un archivo viejo.
 #
-#  (Lección del ADDENDUM 24: ya nos pasó 3 veces. Basta.)
+#  Después de copiar con éxito, BORRA el original de Descargas
+#  para que no se acumule ni se confunda después (patrón
+#  "Descargas viejas" — ADDENDUM 24).
+#
+#  Si el hash NO matchea, NO borra (para que puedas re-descargar).
 #
 #  USO:
 #    verificar-entrega.sh <archivo> <hash-esperado> <destino>
@@ -42,6 +46,7 @@ if [ $# -ne 3 ]; then
   echo "EJEMPLO:"
   echo "  verificar-entrega.sh ~/Descargas/migracion.sql abc123... ~/dev/repo/migracion.sql"
   echo ""
+  echo "Después de copiar con éxito, borra el original (limpieza automática)."
   exit 1
 fi
 
@@ -85,11 +90,21 @@ ok "Hash correcto ✓"
 cp "$ARCHIVO" "$DESTINO"
 ok "Copiado a: $DESTINO"
 
-echo "------------------------------------------------------------"
-ok "Entrega verificada y copiada. Listo."
-echo ""
-
-# ---------- 5. Hash de confirmación (para pegar al copiloto) ----------
+# ---------- 5. Verificar que el destino tiene el mismo hash ----------
 HASH_DESTINO=$(sha256sum "$DESTINO" | awk '{print $1}')
+if [ "$HASH_DESTINO" != "$HASH_REAL" ]; then
+  fail "ERROR: el hash del destino no coincide después de copiar"
+  fail "Algo salió mal en la copia. El original NO se borra."
+  exit 1
+fi
+ok "Hash en destino verificado ✓"
+
+# ---------- 6. Limpiar el original de Descargas ----------
+rm "$ARCHIVO"
+ok "Original borrado de Descargas (limpieza automática) 🧹"
+
+echo "------------------------------------------------------------"
+ok "Entrega verificada, copiada y limpia. Listo."
+echo ""
 echo "Hash en destino: $HASH_DESTINO"
 echo ""
