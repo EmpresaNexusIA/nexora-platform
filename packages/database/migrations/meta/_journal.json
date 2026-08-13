@@ -43,6 +43,13 @@
       "when": 1786631394042,
       "tag": "0005_grant_api_user_multitenant",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1786638000000,
+      "tag": "0006_password_hash_y_login_policy",
+      "breakpoints": true
     }
   ]
 }
