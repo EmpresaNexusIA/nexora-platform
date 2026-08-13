@@ -7,7 +7,9 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "tsx watch src/index.ts"
+    "dev": "tsx watch src/index.ts",
+    "dev:encargado": "DLQ_WATCHMAN=on ENCARGADO=on tsx --env-file=../../.env src/index.ts",
+    "stop": "pkill -INT -f '[s]rc/index.ts'; exit 0"
   },
   "dependencies": {
     "pg": "^8.22.0",

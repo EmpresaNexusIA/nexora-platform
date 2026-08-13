@@ -54,9 +54,13 @@ export class EventProcessor {
         durationMs: Date.now() - startTime
       });
 
-    } catch (error: any) {
+    } catch (error: unknown) {
+      // v2 (12/8): deuda fina saldada — `any` → `unknown` con conversión segura.
+      // El logger.error exige un Error real; si lo que se lanzó no lo es,
+      // se envuelve sin perder el original (se re-lanza tal cual abajo).
       this.metrics.incrementFailure();
-      this.logger.error('Error procesando evento.', error, context);
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.logger.error('Error procesando evento.', err, context);
       throw error;
     }
   }

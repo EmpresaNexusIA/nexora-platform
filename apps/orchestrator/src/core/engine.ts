@@ -17,7 +17,9 @@
  *   WORKER=on
  * Opcionales: WORKER_BATCH (default 10) · WORKER_INTERVAL_MS (default 5000)
  *
- * El apagado elegante va por el apagado compartido del index (alApagar).
+ * v2 (12/8, review): stop() con TIMEOUT DE FUERZA — Promise.race de 10s.
+ * Si el apagado elegante se cuelga, corta igual (apagado prolijo SIEMPRE,
+ * con tope; nunca zombie ni kill -9 de rutina).
  */
 
 import { Pool } from 'pg';
@@ -36,6 +38,8 @@ import { EventProcessor } from './event.processor.js';
 import { UserSoftDeletedHandler } from '../handlers/user-soft-deleted.handler.js';
 import type { OutboxEvent } from '../types/outbox.types.js';
 import type { ClassifiableError } from '../types/resilience.types.js';
+
+const TOPE_APAGADO_MS = 10_000;
 
 export interface EngineHandle {
   start(): void;
@@ -133,8 +137,14 @@ export function crearEngine(pool: Pool, logger: Logger): EngineHandle {
         clearInterval(timer);
         timer = null;
       }
-      await worker.stop();
-      logger.info('Motor: apagado, ronda en curso terminada.');
+      // v2 (12/8, review): timeout de fuerza — si el stop elegante se cuelga
+      // (p. ej. un job que no termina), a los 10s corta igual y el proceso
+      // puede cerrar el pool y salir. Prolijo SIEMPRE, con tope.
+      await Promise.race([
+        worker.stop(),
+        new Promise<void>((resolve) => setTimeout(resolve, TOPE_APAGADO_MS)),
+      ]);
+      logger.info('Motor: apagado (con tope de 10s si hizo falta).');
     },
   };
 }

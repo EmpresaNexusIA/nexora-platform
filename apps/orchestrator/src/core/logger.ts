@@ -6,7 +6,9 @@ export interface LogContext {
   tenantId?: string;
   handler?: string;
   durationMs?: number;
-  [key: string]: any;
+  // Deuda saldada (v2, 12/8): antes era `any` — ahora `unknown` (tipado fino,
+  // mismo criterio de F3). Cualquier meta extra se pasa como valor desconocido.
+  [key: string]: unknown;
 }
 
 export class Logger {

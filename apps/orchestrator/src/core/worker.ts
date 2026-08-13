@@ -35,8 +35,10 @@ export class OutboxWorker {
       this.running = true;
       await this.processor.process({ ...rawEvent, ...context });
 
-    } catch (error: any) {
-      this.logger.error('Error crítico en Worker.', error, {
+    } catch (error: unknown) {
+      // v2 (12/8): deuda fina saldada — `any` → `unknown` con conversión segura.
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.logger.error('Error crítico en Worker.', err, {
         eventId: context.eventId,
         traceId: context.traceId
       });
@@ -62,7 +64,18 @@ export class OutboxWorker {
 
     this.running = false;
 
+    // v2 (12/8, review): tope de fuerza de 10s. Antes el while podía colgarse
+    // para siempre si un job no terminaba → proceso zombie + kill -9 de rutina
+    // (lo que la casa evita). Ahora: apagado prolijo SIEMPRE, con límite.
+    const plazo = Date.now() + 10_000;
+
     while (this.activeJobs > 0) {
+      if (Date.now() > plazo) {
+        this.logger.warn('Worker: tope de apagado (10s) alcanzado — forzando.', {
+          activeJobs: this.activeJobs
+        });
+        break;
+      }
       this.logger.info('Esperando tareas activas...', {
         activeJobs: this.activeJobs
       });
