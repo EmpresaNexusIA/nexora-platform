@@ -3,7 +3,7 @@ import Fastify from "fastify";
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
-import { ZodTypeProvider } from "@fastify/type-provider-zod";
+import { ZodTypeProvider, serializerCompiler, validatorCompiler } from "@fastify/type-provider-zod";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { config } from "./config.js";
@@ -21,6 +21,9 @@ import { pool } from "@nexora/database";
 const app = Fastify({
   logger: config.isDev,
 }).withTypeProvider<ZodTypeProvider>();
+
+app.setValidatorCompiler(validatorCompiler);
+app.setSerializerCompiler(serializerCompiler);
 
 // --- Plugins de infraestructura ---
 await app.register(cookie, {});
@@ -225,7 +228,7 @@ app.get("/tenants/me", { config: { required: true } }, async (request, reply) =>
 // ============================================================
 //  Startup
 // ============================================================
-app.listen({ port: config.port, host: "0.0.0.0" }, (err, address) => {
+app.listen({ port: config.port, host: config.host }, (err, address) => {
   if (err) {
     app.log.error(err);
     process.exit(1);
