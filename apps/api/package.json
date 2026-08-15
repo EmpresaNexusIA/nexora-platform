@@ -7,8 +7,9 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
-    "lint": "eslint src --ext .ts",
-    "typecheck": "tsc --noEmit"
+    "lint": "pnpm run typecheck",
+    "typecheck": "tsc --noEmit",
+    "pretypecheck": "pnpm --filter @nexora/context build"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.2",
