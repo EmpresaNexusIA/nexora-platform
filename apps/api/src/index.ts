@@ -12,6 +12,7 @@ import { signAccessToken, signRefreshToken, verifyToken } from "./lib/jwt.js";
 import { authPlugin } from "./plugins/auth.js";
 import { tenantPlugin } from "./plugins/tenant.js";
 import { pool } from "@nexora/database";
+import { sql } from "drizzle-orm";
 
 // ============================================================
 //  Nexora API — Server principal
@@ -38,8 +39,10 @@ await app.register(rateLimit, {
 });
 
 // --- Plugins de dominio ---
-await app.register(authPlugin);
-await app.register(tenantPlugin);
+// Se aplican sobre la instancia raíz para que hooks y decoradores
+// alcancen obligatoriamente a todas las rutas declaradas debajo.
+await authPlugin(app);
+await tenantPlugin(app);
 
 // --- Healthcheck público ---
 app.get("/health", async () => {
@@ -182,16 +185,20 @@ app.post("/logout", async (request, reply) => {
 // ============================================================
 //  GET /me — Ruta protegida (demuestra el wrapper de tenant)
 // ============================================================
-app.get("/me", { config: { required: true } }, async (request, reply) => {
+app.get(
+  "/me",
+  { config: { required: true, withTenant: true } },
+  async (request, reply) => {
   if (!request.userId || !request.tenantId) {
     return reply.code(401).send({ error: "No autenticado" });
   }
 
-  const userInfo = await app.withTenant(request, async () => {
-    const result = await pool.query(
-      "SELECT id, email, name, status FROM users WHERE id = $1",
-      [request.userId],
-    );
+  const userInfo = await app.withTenant(request, async (db) => {
+    const result = await db.execute(sql`
+      SELECT id, email, name, status
+      FROM users
+      WHERE id = ${request.userId}
+    `);
     return result.rows[0];
   });
 
@@ -205,16 +212,20 @@ app.get("/me", { config: { required: true } }, async (request, reply) => {
 // ============================================================
 //  GET /tenants/me — Datos del tenant del usuario
 // ============================================================
-app.get("/tenants/me", { config: { required: true } }, async (request, reply) => {
+app.get(
+  "/tenants/me",
+  { config: { required: true, withTenant: true } },
+  async (request, reply) => {
   if (!request.tenantId) {
     return reply.code(401).send({ error: "No autenticado" });
   }
 
-  const tenant = await app.withTenant(request, async () => {
-    const result = await pool.query(
-      "SELECT id, name, slug, status FROM tenants WHERE id = $1",
-      [request.tenantId],
-    );
+  const tenant = await app.withTenant(request, async (db) => {
+    const result = await db.execute(sql`
+      SELECT id, name, slug, status
+      FROM tenants
+      WHERE id = ${request.tenantId}
+    `);
     return result.rows[0];
   });
 

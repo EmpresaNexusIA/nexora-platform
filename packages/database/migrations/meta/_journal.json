@@ -50,6 +50,20 @@
       "when": 1786638000000,
       "tag": "0006_password_hash_y_login_policy",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1786810754621,
+      "tag": "0007_harden_find_user_by_email",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1786812000000,
+      "tag": "0008_revoke_public_default_function_execute",
+      "breakpoints": true
     }
   ]
 }

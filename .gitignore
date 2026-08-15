@@ -25,3 +25,6 @@ package-lock.json
 
 # Offset del Encargado (A1.2) - estado local, no va al repo
 .encargado-offset.json
+
+# TypeScript incremental build artifacts
+*.tsbuildinfo
