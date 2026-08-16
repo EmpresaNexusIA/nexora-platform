@@ -9,6 +9,7 @@ import bcrypt from "bcryptjs";
 import { config } from "./config.js";
 import { redis } from "./lib/redis.js";
 import { signAccessToken, signRefreshToken, verifyToken } from "./lib/jwt.js";
+import { checkReadiness } from "./lib/readiness.js";
 import { authPlugin } from "./plugins/auth.js";
 import { tenantPlugin } from "./plugins/tenant.js";
 import { pool } from "@nexora/database";
@@ -44,9 +45,32 @@ await app.register(rateLimit, {
 await authPlugin(app);
 await tenantPlugin(app);
 
-// --- Healthcheck público ---
-app.get("/health", async () => {
+// --- Compatibilidad: /health conserva la respuesta historica ---
+app.get("/health", { config: { rateLimit: false } }, async () => {
   return { status: "ok", timestamp: new Date().toISOString() };
+});
+
+// --- Liveness: Fastify esta ejecutando el event loop ---
+app.get("/health/live", { config: { rateLimit: false } }, async () => {
+  return { status: "alive", timestamp: new Date().toISOString() };
+});
+
+// --- Readiness: la API puede trabajar con sus dependencias criticas ---
+app.get("/health/ready", { config: { rateLimit: false } }, async (_request, reply) => {
+  const result = await checkReadiness();
+
+  if (!result.ready) {
+    app.log.warn(
+      { checks: result.checks },
+      "Nexora API no esta lista para recibir trafico",
+    );
+  }
+
+  return reply.code(result.ready ? 200 : 503).send({
+    status: result.ready ? "ready" : "not_ready",
+    checks: result.checks,
+    timestamp: new Date().toISOString(),
+  });
 });
 
 // ============================================================

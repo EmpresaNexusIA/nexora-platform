@@ -13,11 +13,21 @@
 #                  registrada en el journal (commit final del A3).
 #  v3 (F5 MinIO):  familia de 5 + chequeo 9: MinIO health/live.
 #  v2 (F5 Redis):  familia de 4 + chequeo 8: Redis PONG.
-#  Uso:   bash healthcheck.sh
+#  v6 (B1 API):    perfil opcional b1 agrega readiness de apps/api.
+#  Uso base:       bash healthcheck.sh
+#  Uso B1:         NEXORA_PROFILE=b1 bash healthcheck.sh
 #  Salida: ✓/✗ por órgano + exit code = nº de fallas (0 = sano).
 # ============================================================
 
 set -u
+
+PROFILE="${NEXORA_PROFILE:-base}"
+API_READY_URL="${NEXORA_API_READY_URL:-http://127.0.0.1:3001/health/ready}"
+
+case "$PROFILE" in
+  base|b1) ;;
+  *) echo "✗ Perfil desconocido: $PROFILE (usar base o b1)"; exit 2 ;;
+esac
 
 # ---- Verdades del organismo (solo cambian tras un transplante) ----
 DNI_ESPERADO="7670634338808201248"
@@ -31,6 +41,7 @@ cruzar() { echo "✗ $1"; FALLAS=$((FALLAS+1)); }
 
 echo ""
 echo "🩺 NEXORA — Chequeo de salud ($(date "+%Y-%m-%d %H:%M"))"
+echo "Perfil: $PROFILE"
 echo "------------------------------------------------------------"
 
 # ---- 1. Motor Docker -------------------------------------------------
@@ -132,6 +143,17 @@ if [ "$QCODIGO" = "200" ]; then
   tildar "10. Qdrant por dentro: vivo (healthz 200 — la biblioteca abre)"
 else
   cruzar "10. Qdrant por dentro: no responde (HTTP $QCODIGO)"
+fi
+
+# ---- 11. API B1 lista (solo perfil b1) -----------------------------------
+if [ "$PROFILE" = "b1" ]; then
+  ACODIGO=$(curl -s -o /dev/null -w "%{http_code}" --max-time 8 "$API_READY_URL" 2>/dev/null)
+  [ -z "$ACODIGO" ] && ACODIGO="000"
+  if [ "$ACODIGO" = "200" ]; then
+    tildar "11. API B1: lista (Postgres api_user + Redis + JWT, readiness 200)"
+  else
+    cruzar "11. API B1: no lista o apagada (HTTP $ACODIGO en $API_READY_URL)"
+  fi
 fi
 
 # ---- Diagnóstico final ---------------------------------------------------

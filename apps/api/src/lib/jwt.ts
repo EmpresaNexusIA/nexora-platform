@@ -25,6 +25,21 @@ async function getPublicKey(): Promise<CryptoKey> {
   return publicKey;
 }
 
+// Readiness criptografico: demuestra que ambas claves cargan y forman
+// un par RS256 valido, sin emitir credenciales de usuario.
+export async function checkJwtReadiness(): Promise<void> {
+  const [signingKey, verificationKey] = await Promise.all([
+    getPrivateKey(),
+    getPublicKey(),
+  ]);
+  const probe = await new SignJWT({ readiness: true })
+    .setProtectedHeader({ alg: "RS256", typ: "JWT" })
+    .setIssuedAt()
+    .setExpirationTime("30s")
+    .sign(signingKey);
+  await jwtVerify(probe, verificationKey, { algorithms: ["RS256"] });
+}
+
 export async function signAccessToken(userId: string, tenantId: string): Promise<string> {
   const key = await getPrivateKey();
   return new SignJWT({ type: "access", tenantId })
