@@ -8,6 +8,16 @@ import { Logger } from './core/logger.js';
 
 const dispatcher = new EventDispatcher();
 
+function requiredOrchestratorDatabaseUrl(): string {
+  const value = process.env.ORCHESTRATOR_DATABASE_URL;
+  if (!value) {
+    throw new Error(
+      "Falta ORCHESTRATOR_DATABASE_URL: Ojo y Worker no usan credenciales por defecto"
+    );
+  }
+  return value;
+}
+
 // Registro condicional para suite de validación
 
 if (process.env.NODE_ENV === 'test') {
@@ -50,7 +60,7 @@ process.once('SIGTERM', apagarTodo);
 //   DLQ_WATCHMAN=on pnpm exec tsx --env-file ../../.env src/index.ts
 // Opcionales:
 //   DLQ_WATCH_MS=60000      (intervalo; default 300000 = 5 min)
-//   DATABASE_URL=postgres://...  (default: dev local)
+//   ORCHESTRATOR_DATABASE_URL=postgres://...  (obligatoria; sin default)
 //   TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID  (en .env → avisos al bolsillo;
 //                                           si faltan, queda en modo mudo)
 // REGLA DE ORO: el token vive SOLO en el .env. Jamás en código/chats.
@@ -58,9 +68,7 @@ process.once('SIGTERM', apagarTodo);
 
 if (process.env.DLQ_WATCHMAN === 'on' && process.env.NODE_ENV !== 'test') {
   const pool = new Pool({
-    connectionString:
-      process.env.DATABASE_URL ??
-      'postgresql://nexora_admin:nexora_pass_dev_123@localhost:5432/nexora_dev',
+    connectionString: requiredOrchestratorDatabaseUrl(),
   });
 
   // Logger mínimo (TODO deuda conocida: enchufar al logger real del core).
@@ -98,8 +106,8 @@ if (process.env.DLQ_WATCHMAN === 'on' && process.env.NODE_ENV !== 'test') {
 
 // ============================================================
 // 🧔 EL ENCARGADO — A1.2 (Parto 1): oreja Telegram + /ayuda + /estado
-// Escucha comandos del fundador (long-polling, solo salida) y responde.
-// SOLO-LECTURA por contrato: nunca escribe ni toca el organismo.
+// Escucha comandos del fundador por long-polling y responde.
+// Las acciones explicitas del fundador pueden escribir CRM; no son autonomia.
 //
 // LLAVE DE ENCENDIDO (apagado por defecto): ENCARGADO=on
 //   ENCARGADO=on pnpm exec tsx --env-file ../../.env src/index.ts
@@ -141,9 +149,7 @@ if (process.env.ENCARGADO === 'on' && process.env.NODE_ENV !== 'test') {
 
 if (process.env.WORKER === 'on' && process.env.NODE_ENV !== 'test') {
   const pool = new Pool({
-    connectionString:
-      process.env.DATABASE_URL ??
-      'postgresql://nexora_admin:nexora_pass_dev_123@localhost:5432/nexora_dev',
+    connectionString: requiredOrchestratorDatabaseUrl(),
   });
   const logger = new Logger();
   const engine = crearEngine(pool, logger);

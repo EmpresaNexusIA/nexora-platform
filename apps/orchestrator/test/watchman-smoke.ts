@@ -10,9 +10,10 @@
 import { Pool } from 'pg';
 import { DlQWatchman } from '../src/vigilance/dlq.watchman.js';
 
-const connectionString =
-  process.env.DATABASE_URL ??
-  'postgresql://nexora_admin:nexora_pass_dev_123@localhost:5432/nexora_dev';
+const connectionString = process.env.ORCHESTRATOR_DATABASE_URL;
+if (!connectionString) {
+  throw new Error("Falta ORCHESTRATOR_DATABASE_URL para watchman-smoke");
+}
 
 const logger = {
   info: (msg: string, meta?: unknown) => console.log('ℹ️ ', msg, meta ?? ''),

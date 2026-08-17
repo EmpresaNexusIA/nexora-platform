@@ -33,7 +33,7 @@ interface ClienteFila {
 }
 
 async function conectar(): Promise<Client | null> {
-  const url = process.env.DATABASE_URL;
+  const url = process.env.ENCARGADO_DATABASE_URL;
   if (!url) return null;
   const client = new Client({
     connectionString: url,
@@ -47,7 +47,7 @@ async function conectar(): Promise<Client | null> {
 /** 📋 /clientes — la lista (últimos 15, los más recientes primero). */
 export async function listarClientes(): Promise<string> {
   const client = await conectar().catch(() => null);
-  if (!client) return '🏛️ No tengo DATABASE_URL — avisale al taller.';
+  if (!client) return '🏛️ No tengo ENCARGADO_DATABASE_URL — avisale al taller.';
   try {
     const r = await client.query<{ id: string; nombre: string; rubro: string | null; estado: string }>(
       `SELECT id, nombre, rubro, estado
@@ -81,7 +81,7 @@ export async function nuevoCliente(linea: string): Promise<string> {
     return '📝 Para /nuevo-cliente necesito al menos el nombre, jefe: /nuevo-cliente <nombre> | <rubro> | <teléfono>';
   }
   const client = await conectar().catch(() => null);
-  if (!client) return '🏛️ No tengo DATABASE_URL — avisale al taller.';
+  if (!client) return '🏛️ No tengo ENCARGADO_DATABASE_URL — avisale al taller.';
   try {
     const r = await client.query<{ id: string }>(
       `INSERT INTO public.clientes (nombre, rubro, telefono)
@@ -100,7 +100,7 @@ export async function nuevoCliente(linea: string): Promise<string> {
 /** 🔍 /cliente <nombre o id> — la ficha completa. */
 export async function detalleCliente(termino: string): Promise<string> {
   const client = await conectar().catch(() => null);
-  if (!client) return '🏛️ No tengo DATABASE_URL — avisale al taller.';
+  if (!client) return '🏛️ No tengo ENCARGADO_DATABASE_URL — avisale al taller.';
   try {
     const r = await client.query<ClienteFila>(
       `SELECT id,
@@ -153,7 +153,7 @@ export async function cambiarEstadoCliente(termino: string, estado: string): Pro
     return `📝 Los estados válidos son: ${ESTADOS.join(', ')}.`;
   }
   const client = await conectar().catch(() => null);
-  if (!client) return '🏛️ No tengo DATABASE_URL — avisale al taller.';
+  if (!client) return '🏛️ No tengo ENCARGADO_DATABASE_URL — avisale al taller.';
   try {
     const r = await client.query<{ id: string; nombre: string }>(
       `UPDATE public.clientes

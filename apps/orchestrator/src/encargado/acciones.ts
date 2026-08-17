@@ -26,7 +26,7 @@ export interface MuertoInfo {
 }
 
 async function conectar(): Promise<Client | null> {
-  const url = process.env.DATABASE_URL;
+  const url = process.env.ENCARGADO_DATABASE_URL;
   if (!url) return null;
   const client = new Client({
     connectionString: url,
@@ -40,7 +40,7 @@ async function conectar(): Promise<Client | null> {
 /** ⚰️ /muertos — la mesa de autopsias (solo NO resueltos). */
 export async function listarMuertos(): Promise<string> {
   const client = await conectar().catch(() => null);
-  if (!client) return '🏛️ No tengo DATABASE_URL — avisale al taller.';
+  if (!client) return '🏛️ No tengo ENCARGADO_DATABASE_URL — avisale al taller.';
   try {
     const r = await client.query<MuertoInfo>(
       `SELECT id,
@@ -106,7 +106,7 @@ export async function resolverMuerto(
 /** ⚰️ /enterrar — marca resuelto + prontuario con EXITO (acción terminal). */
 export async function ejecutarEnterrar(dlqId: string, aprobadoPor: string): Promise<string> {
   const client = await conectar().catch(() => null);
-  if (!client) return '🏛️ No tengo DATABASE_URL — avisale al taller.';
+  if (!client) return '🏛️ No tengo ENCARGADO_DATABASE_URL — avisale al taller.';
   try {
     // El fundador manda el id corto de /muertos: se resuelve a uuid completo
     // ANTES de tocar nada (defensa en profundidad: esta función acepta ambos).
@@ -147,7 +147,7 @@ export async function ejecutarEnterrar(dlqId: string, aprobadoPor: string): Prom
 /** 🔄 /reintentar — revive la MISMA fila del outbox (UPDATE) + prontuario pendiente. */
 export async function ejecutarReintentar(dlqId: string, aprobadoPor: string): Promise<string> {
   const client = await conectar().catch(() => null);
-  if (!client) return '🏛️ No tengo DATABASE_URL — avisale al taller.';
+  if (!client) return '🏛️ No tengo ENCARGADO_DATABASE_URL — avisale al taller.';
   try {
     const resuelto = await resolverMuerto(client, dlqId);
     if (!resuelto.ok) return resuelto.mensaje;
@@ -254,7 +254,7 @@ export async function verificarResultadosPendientes(): Promise<string> {
 /** 📜 /prontuario — el historial de acciones con su resultado (solo lectura). */
 export async function verProntuario(): Promise<string> {
   const client = await conectar().catch(() => null);
-  if (!client) return '🏛️ No tengo DATABASE_URL — avisale al taller.';
+  if (!client) return '🏛️ No tengo ENCARGADO_DATABASE_URL — avisale al taller.';
   try {
     const r = await client.query<{
       accion: string;

@@ -4,14 +4,20 @@ import pg from "pg";
 const TENANT_A = "00000000-0000-0000-0000-000000000001";
 const TENANT_B = "00000000-0000-0000-0000-000000000002";
 
-// Pool admin (superuser) para setup/teardown - bypasea RLS
+function requiredEnv(key: "DATABASE_ADMIN_URL" | "DATABASE_API_URL"): string {
+  const value = process.env[key];
+  if (!value) throw new Error(`Falta ${key} para tenant-isolation.test.ts`);
+  return value;
+}
+
+// Pool admin para setup/teardown controlado.
 const adminPool = new pg.Pool({
-  connectionString: "postgresql://nexora_admin:nexora_pass_dev_123@localhost:5432/nexora_dev"
+  connectionString: requiredEnv("DATABASE_ADMIN_URL"),
 });
 
-// Pool app (no superuser) - sujeto a RLS
+// Pool runtime api_user, sujeto a RLS.
 const appPool = new pg.Pool({
-  connectionString: process.env.DATABASE_URL
+  connectionString: requiredEnv("DATABASE_API_URL"),
 });
 
 beforeAll(async () => {

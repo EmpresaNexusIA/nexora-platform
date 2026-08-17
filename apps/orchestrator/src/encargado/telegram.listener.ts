@@ -17,7 +17,7 @@
  *   mismo offset. Solo más transparencia.
  *
  * REGLAS DEL CONTRATO (A1.2):
- * - Solo-lectura: el Encargado NUNCA escribe en el organismo.
+ * - Solo comandos del fundador: las escrituras CRM requieren su orden explicita.
  * - Lista blanca: solo responde al TELEGRAM_CHAT_ID del fundador.
  *   Cualquier otro chat = silencio (solo queda anotado).
  * - Offset en disco local (.encargado-offset.json, gitignored):

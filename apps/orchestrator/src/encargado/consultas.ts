@@ -281,9 +281,9 @@ interface FilaOutbox {
  * SELECTs predefinidas, parametrizadas ($1), con LIMIT. Solo lectura.
  */
 export async function dondeEnLaBase(termino: string): Promise<string> {
-  const url = process.env.DATABASE_URL;
+  const url = process.env.ENCARGADO_DATABASE_URL;
   if (!url) {
-    return '🏛️ No tengo DATABASE_URL en el entorno — avisale al taller.';
+    return '🏛️ No tengo ENCARGADO_DATABASE_URL en el entorno — avisale al taller.';
   }
   const client = new Client({
     connectionString: url,

@@ -1,7 +1,9 @@
 #!/bin/bash
 
+set -euo pipefail
+
 # --- Configuración de DB ---
-DB_URL="postgresql://postgres:postgres@localhost:5432/nexora"
+DB_URL="${TEST_DATABASE_URL:?Falta TEST_DATABASE_URL para test-data-builder.sh}"
 
 # --- Helpers de Inserción ---
 create_event() {

@@ -139,8 +139,8 @@ async function proponerAccion(
   tipo: 'enterrar' | 'reintentar',
   idOpcion: string
 ): Promise<string> {
-  const url = process.env.DATABASE_URL;
-  if (!url) return '🏛️ No tengo DATABASE_URL — avisale al taller.';
+  const url = process.env.ENCARGADO_DATABASE_URL;
+  if (!url) return '🏛️ No tengo ENCARGADO_DATABASE_URL — avisale al taller.';
   const client = new Client({
     connectionString: url,
     connectionTimeoutMillis: 5_000,

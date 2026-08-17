@@ -4,14 +4,24 @@ import * as schema from "./schema";
 import { randomUUID } from "crypto";
 import { eq } from "drizzle-orm";
 
+const databaseUrl = process.env.DATABASE_URL;
+if (!databaseUrl) {
+  throw new Error("Falta DATABASE_URL para ejecutar el seed");
+}
+
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || "postgresql://postgres:postgres@localhost:5432/nexora",
+  connectionString: databaseUrl,
 });
 
 const db = drizzle(pool, { schema });
 
 async function main() {
   console.log("🌱 Iniciando la siembra de base de datos (Seeding)...");
+
+  const identity = await pool.query<{ current_user: string }>("SELECT current_user");
+  if (identity.rows[0]?.current_user !== "nexora_admin") {
+    throw new Error("El seed debe ejecutarse como nexora_admin");
+  }
 
   // 1. Buscar si ya existe el Tenant 'acme-corp'
   let tenantId: string;
