@@ -13,8 +13,9 @@ export const rolesToPermissions = pgTable(
       .notNull(),
   },
   (t) => [
-    {
-      pk: primaryKey({ columns: [t.roleId, t.permissionId] }),
-    },
+    primaryKey({
+      name: "roles_to_permissions_pkey",
+      columns: [t.roleId, t.permissionId],
+    }),
   ]
 );

@@ -64,6 +64,13 @@
       "when": 1786812000000,
       "tag": "0008_revoke_public_default_function_execute",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1787274300000,
+      "tag": "0009_rbac_integrity_runtime_boundary",
+      "breakpoints": true
     }
   ]
 }

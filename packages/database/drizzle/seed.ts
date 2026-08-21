@@ -2,7 +2,11 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
 import * as schema from "./schema";
 import { randomUUID } from "crypto";
-import { eq } from "drizzle-orm";
+import { and, eq, inArray, isNull } from "drizzle-orm";
+
+if (process.env.ALLOW_DEV_SEED !== "true") {
+  throw new Error("Seed bloqueado: definir ALLOW_DEV_SEED=true de forma explicita");
+}
 
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl) {
@@ -57,7 +61,15 @@ async function main() {
   console.log("🔑 Permisos base creados o verificados.");
 
   // Recuperamos los permisos reales de la base de datos para mapear sus IDs reales
-  const dbPermissions = await db.select().from(schema.permissions);
+  const dbPermissions = await db
+    .select()
+    .from(schema.permissions)
+    .where(
+      and(
+        inArray(schema.permissions.name, ["users:read", "users:write", "tenant:settings"]),
+        isNull(schema.permissions.deletedAt),
+      ),
+    );
   const permMap = Object.fromEntries(dbPermissions.map(p => [p.name, p.id]));
 
   // 3. Crear Roles Globales (tenant_id en null)
@@ -81,7 +93,16 @@ async function main() {
   console.log("👑 Roles globales 'Administrador' y 'Miembro' listos/verificados.");
 
   // Recuperamos los roles de la base de datos
-  const dbRoles = await db.select().from(schema.roles);
+  const dbRoles = await db
+    .select()
+    .from(schema.roles)
+    .where(
+      and(
+        isNull(schema.roles.tenantId),
+        isNull(schema.roles.deletedAt),
+        inArray(schema.roles.name, ["Administrador", "Miembro"]),
+      ),
+    );
   const adminRole = dbRoles.find(r => r.name === "Administrador");
   const memberRole = dbRoles.find(r => r.name === "Miembro");
 
