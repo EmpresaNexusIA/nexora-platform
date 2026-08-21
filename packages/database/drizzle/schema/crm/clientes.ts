@@ -8,6 +8,7 @@ import {
   timestamp,
   uuid,
 } from "drizzle-orm/pg-core";
+import { tenants } from "../core/tenant.js";
 
 export const clientes = pgTable("clientes", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -19,6 +20,7 @@ export const clientes = pgTable("clientes", {
   servicioVendido: text("servicio_vendido").default("ninguno"),
   estado: text("estado").default("nuevo").notNull(),
   notas: text("notas"),
+  provisionedTenantId: uuid("provisioned_tenant_id").references(() => tenants.id),
   creadoEn: timestamp("creado_en", { withTimezone: true }).defaultNow().notNull(),
   actualizadoEn: timestamp("actualizado_en", { withTimezone: true }).defaultNow().notNull(),
 }, (t) => [
@@ -28,8 +30,9 @@ export const clientes = pgTable("clientes", {
   ),
   check(
     "clientes_estado_check",
-    sql`${t.estado} IN ('nuevo', 'contactado', 'presupuestando', 'vendido', 'activo')`,
+    sql`${t.estado} IN ('nuevo', 'contactado', 'presupuestando', 'vendido', 'onboarding', 'activo')`,
   ),
   index("idx_clientes_estado").on(t.estado),
   index("idx_clientes_nombre").on(t.nombre),
+  index("idx_clientes_provisioned_tenant_id").on(t.provisionedTenantId),
 ]);

@@ -9,7 +9,8 @@
     "start": "tsx src/index.ts",
     "lint": "pnpm run typecheck",
     "typecheck": "tsc --noEmit",
-    "pretypecheck": "pnpm --filter @nexora/context build"
+    "pretypecheck": "pnpm --filter @nexora/context build",
+    "test": "vitest run"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.2",
@@ -32,6 +33,7 @@
     "@types/node": "^24.0.0",
     "@types/pg": "^8.15.0",
     "tsx": "^4.19.2",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10"
   }
 }

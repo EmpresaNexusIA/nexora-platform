@@ -4,45 +4,43 @@ import pg from "pg";
 const TENANT_A = "00000000-0000-0000-0000-000000000001";
 const TENANT_B = "00000000-0000-0000-0000-000000000002";
 
-function requiredEnv(key: "DATABASE_ADMIN_URL" | "DATABASE_API_URL"): string {
-  const value = process.env[key];
-  if (!value) throw new Error(`Falta ${key} para tenant-isolation.test.ts`);
-  return value;
-}
+const adminUrl = process.env.DATABASE_ADMIN_URL;
+const apiUrl = process.env.DATABASE_API_URL;
+const isDbAvailable = Boolean(adminUrl && apiUrl);
 
-// Pool admin para setup/teardown controlado.
-const adminPool = new pg.Pool({
-  connectionString: requiredEnv("DATABASE_ADMIN_URL"),
-});
+describe.runIf(isDbAvailable)("Tenant Isolation", () => {
+  let adminPool: pg.Pool;
+  let appPool: pg.Pool;
 
-// Pool runtime api_user, sujeto a RLS.
-const appPool = new pg.Pool({
-  connectionString: requiredEnv("DATABASE_API_URL"),
-});
+  beforeAll(async () => {
+    adminPool = new pg.Pool({ connectionString: adminUrl });
+    appPool = new pg.Pool({ connectionString: apiUrl });
 
-beforeAll(async () => {
-  await adminPool.query(`
-    INSERT INTO tenants (id, name, slug) VALUES
-    ('${TENANT_A}', 'Tenant A', 'tenant-a'),
-    ('${TENANT_B}', 'Tenant B', 'tenant-b')
-    ON CONFLICT DO NOTHING
-  `);
-  await adminPool.query(`
-    INSERT INTO users (id, tenant_id, email) VALUES
-    ('00000000-0000-0000-0001-000000000001', '${TENANT_A}', 'user@tenant-a.com'),
-    ('00000000-0000-0000-0002-000000000001', '${TENANT_B}', 'user@tenant-b.com')
-    ON CONFLICT DO NOTHING
-  `);
-});
+    await adminPool.query(`
+      INSERT INTO tenants (id, name, slug) VALUES
+      ('${TENANT_A}', 'Tenant A', 'tenant-a'),
+      ('${TENANT_B}', 'Tenant B', 'tenant-b')
+      ON CONFLICT DO NOTHING
+    `);
+    await adminPool.query(`
+      INSERT INTO users (id, tenant_id, email) VALUES
+      ('00000000-0000-0000-0001-000000000001', '${TENANT_A}', 'user@tenant-a.com'),
+      ('00000000-0000-0000-0002-000000000001', '${TENANT_B}', 'user@tenant-b.com')
+      ON CONFLICT DO NOTHING
+    `);
+  });
 
-afterAll(async () => {
-  await adminPool.query("DELETE FROM users WHERE email IN ('user@tenant-a.com', 'user@tenant-b.com')");
-  await adminPool.query("DELETE FROM tenants WHERE id IN ('${TENANT_A}', '${TENANT_B}')");
-  await adminPool.end();
-  await appPool.end();
-});
+  afterAll(async () => {
+    if (adminPool) {
+      await adminPool.query("DELETE FROM users WHERE email IN ('user@tenant-a.com', 'user@tenant-b.com')");
+      await adminPool.query(`DELETE FROM tenants WHERE id IN ('${TENANT_A}', '${TENANT_B}')`);
+      await adminPool.end();
+    }
+    if (appPool) {
+      await appPool.end();
+    }
+  });
 
-describe("Tenant Isolation", () => {
   it("Tenant A solo ve sus propios usuarios", async () => {
     const client = await appPool.connect();
     try {

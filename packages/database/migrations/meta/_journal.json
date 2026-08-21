@@ -71,6 +71,13 @@
       "when": 1787274300000,
       "tag": "0009_rbac_integrity_runtime_boundary",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1787360000000,
+      "tag": "0010_onboarding_activation_boundary",
+      "breakpoints": true
     }
   ]
 }
