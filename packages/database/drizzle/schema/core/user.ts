@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, pgTable, uuid, varchar } from "drizzle-orm/pg-core";
+import { check, index, pgTable, uuid, varchar } from "drizzle-orm/pg-core";
 import { tenants } from "./tenant.js";
 import { roles } from "./role.js";
 import { primaryKeyUuidV7, auditFields } from "./helpers.js";
@@ -21,4 +21,5 @@ export const users = pgTable("users", {
     "users_status_check",
     sql`${t.status} IN ('invited', 'active', 'inactive', 'suspended', 'pending_mfa')`,
   ),
+  index("idx_users_email_lower").on(sql`lower(${t.email})`),
 ]);

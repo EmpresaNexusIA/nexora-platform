@@ -1,27 +1,34 @@
 -- ============================================================
 -- Migración 0010 — Frontera de Onboarding y Activación de Clientes
 --
---  1. Agrega public.clientes.provisioned_tenant_id nullable con FK a public.tenants(id).
+--  1. Agrega public.clientes.provisioned_tenant_id nullable con FK
+--     ON DELETE RESTRICT a public.tenants(id).
 --  2. Crea un índice único parcial (idx_clientes_provisioned_tenant_id) para garantizar
 --     que un cliente CRM no pueda aprovisionar más de un tenant.
---  3. Agrega estado 'onboarding' al CHECK constraint de public.clientes.
---  4. Formaliza CHECK constraints para tenants.status y users.status.
---  5. Endurece find_user_by_email() con comparación case-insensitive (LOWER).
---  6. Crea la función angosta SECURITY DEFINER public.complete_client_activation().
---  7. Asigna EXECUTE de complete_client_activation únicamente a api_user y lo revoca de PUBLIC.
---  8. api_user NO recupera acceso directo a public.clientes.
+--  3. Crea un índice funcional sobre LOWER(email) en public.users para acelerar
+--     búsquedas case-insensitive en find_user_by_email().
+--  4. Agrega estado 'onboarding' al CHECK constraint de public.clientes.
+--  5. Formaliza CHECK constraints para tenants.status y users.status.
+--  6. Endurece find_user_by_email() con comparación case-insensitive (LOWER).
+--  7. Crea la función angosta SECURITY DEFINER public.complete_client_activation().
+--  8. Asigna EXECUTE de complete_client_activation únicamente a api_user y lo revoca de PUBLIC.
+--  9. api_user NO recupera acceso directo a public.clientes.
 -- ============================================================
 
 BEGIN;
 
 --> statement-breakpoint
 ALTER TABLE public.clientes
-  ADD COLUMN IF NOT EXISTS provisioned_tenant_id uuid REFERENCES public.tenants(id);
+  ADD COLUMN IF NOT EXISTS provisioned_tenant_id uuid REFERENCES public.tenants(id) ON DELETE RESTRICT;
 
 --> statement-breakpoint
 CREATE UNIQUE INDEX IF NOT EXISTS idx_clientes_provisioned_tenant_id
   ON public.clientes (provisioned_tenant_id)
   WHERE provisioned_tenant_id IS NOT NULL;
+
+--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS idx_users_email_lower
+  ON public.users (lower(email));
 
 --> statement-breakpoint
 ALTER TABLE public.clientes DROP CONSTRAINT IF EXISTS clientes_estado_check;
@@ -87,9 +94,8 @@ DECLARE
   v_tenant_updated integer;
   v_user_updated integer;
 BEGIN
-  -- Validar formato bcrypt de password_hash
-  IF p_password_hash IS NULL OR p_password_hash !~ '^\$2[aby]\$[0-9]{2}\$[./A-Za-z0-9]{53}$' THEN
-    RAISE EXCEPTION 'Formato de password_hash invalido para bcrypt';
+  IF p_password_hash IS NULL OR length(trim(p_password_hash)) = 0 THEN
+    RAISE EXCEPTION 'password_hash no puede ser nulo o vacio';
   END IF;
 
   -- 1. Actualizar exactamente 1 fila en clientes
@@ -154,6 +160,7 @@ COMMIT;
 -- ALTER TABLE public.clientes ADD CONSTRAINT clientes_estado_check
 --   CHECK (estado IN ('nuevo', 'contactado', 'presupuestando', 'vendido', 'activo'));
 --
+-- DROP INDEX IF EXISTS idx_users_email_lower;
 -- DROP INDEX IF EXISTS idx_clientes_provisioned_tenant_id;
 -- ALTER TABLE public.clientes DROP COLUMN IF EXISTS provisioned_tenant_id;
 -- ============================================================
