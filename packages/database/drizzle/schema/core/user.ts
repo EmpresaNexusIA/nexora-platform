@@ -1,4 +1,5 @@
-import { pgTable, uuid, varchar } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import { check, pgTable, uuid, varchar } from "drizzle-orm/pg-core";
 import { tenants } from "./tenant.js";
 import { roles } from "./role.js";
 import { primaryKeyUuidV7, auditFields } from "./helpers.js";
@@ -15,4 +16,9 @@ export const users = pgTable("users", {
   status: varchar("status", { length: 50 }).default("active").notNull(),
   passwordHash: varchar("password_hash", { length: 255 }),
   ...auditFields,
-});
+}, (t) => [
+  check(
+    "users_status_check",
+    sql`${t.status} IN ('invited', 'active', 'inactive', 'suspended', 'pending_mfa')`,
+  ),
+]);

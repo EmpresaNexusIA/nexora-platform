@@ -1,4 +1,5 @@
 import "dotenv/config";
+import crypto from "node:crypto";
 import Fastify from "fastify";
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
@@ -10,6 +11,7 @@ import { config } from "./config.js";
 import { redis } from "./lib/redis.js";
 import { signAccessToken, signRefreshToken, verifyToken } from "./lib/jwt.js";
 import { checkReadiness } from "./lib/readiness.js";
+import { consumeActivationToken } from "./lib/activation-token.js";
 import { authPlugin } from "./plugins/auth.js";
 import { tenantPlugin } from "./plugins/tenant.js";
 import { pool } from "@nexora/database";
@@ -44,6 +46,9 @@ await app.register(rateLimit, {
 // alcancen obligatoriamente a todas las rutas declaradas debajo.
 await authPlugin(app);
 await tenantPlugin(app);
+
+// Delay anti-timing para prevenir timing attacks en rutas sensibles
+const antiTimingDelay = () => new Promise((resolve) => setTimeout(resolve, 200));
 
 // --- Compatibilidad: /health conserva la respuesta historica ---
 app.get("/health", { config: { rateLimit: false } }, async () => {
@@ -93,10 +98,11 @@ app.post(
   },
   async (request, reply) => {
     const { email, password } = request.body as LoginBody;
+    const normalizedEmail = email.trim().toLowerCase();
 
     const result = await pool.query(
       "SELECT * FROM find_user_by_email($1)",
-      [email],
+      [normalizedEmail],
     );
 
     if (result.rows.length === 0) {
@@ -129,7 +135,7 @@ app.post(
     const refreshKey = `refresh:${user.user_id}`;
     await redis.set(refreshKey, refreshToken, "EX", 7 * 24 * 60 * 60);
 
-    app.log.info(`Login OK: ${email} (tenant: ${user.tenant_id})`);
+    app.log.info(`Login OK: ${normalizedEmail} (tenant: ${user.tenant_id})`);
 
     reply.setCookie("access_token", accessToken, {
       httpOnly: true,
@@ -148,6 +154,92 @@ app.post(
     });
 
     return { accessToken, tenantId: user.tenant_id };
+  },
+);
+
+// ============================================================
+//  POST /onboarding/activate — Endpoint público de activación
+// ============================================================
+const onboardingActivateSchema = z.object({
+  token: z.string().min(1, "Token es requerido"),
+  password: z
+    .string()
+    .min(12, "Mínimo 12 caracteres")
+    .regex(/[A-Z]/, "Al menos una mayúscula")
+    .regex(/[a-z]/, "Al menos una minúscula")
+    .regex(/[0-9]/, "Al menos un número")
+    .regex(/[^A-Za-z0-9]/, "Al menos un símbolo"),
+});
+
+type OnboardingActivateBody = z.infer<typeof onboardingActivateSchema>;
+
+app.post(
+  "/onboarding/activate",
+  {
+    schema: {
+      body: onboardingActivateSchema,
+    },
+    // Rate limiting por IP: 3 intentos cada 15 minutos
+    config: { rateLimit: { max: 3, timeWindow: "15 minutes" } },
+  },
+  async (request, reply) => {
+    const { token, password } = request.body as OnboardingActivateBody;
+
+    // Rate limiting adicional por token (1 intento cada 5 minutos por token hash)
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+    const tokenRateLimitKey = `rate_limit_activate_token:${tokenHash}`;
+
+    const acquiredLock = await redis.set(tokenRateLimitKey, "1", "EX", 300, "NX");
+    if (!acquiredLock) {
+      await antiTimingDelay();
+      return reply.code(400).send({ error: "Invitación inválida o expirada" });
+    }
+
+    // Consumo atómico del token en Redis
+    const tokenPayload = await consumeActivationToken(redis, token);
+    if (!tokenPayload) {
+      await antiTimingDelay();
+      return reply.code(400).send({ error: "Invitación inválida o expirada" });
+    }
+
+    // Generación de bcrypt cost 10
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    try {
+      // Ejecución de la función angosta SECURITY DEFINER
+      await pool.query(
+        "SELECT complete_client_activation($1, $2, $3, $4)",
+        [
+          tokenPayload.clientId,
+          tokenPayload.tenantId,
+          tokenPayload.userId,
+          passwordHash,
+        ],
+      );
+    } catch (dbErr) {
+      app.log.error(
+        { err: dbErr, payload: tokenPayload },
+        "CRITICAL: Fallo en DB durante activación post-consumo de token Redis. Se requiere nueva invitación.",
+      );
+      await antiTimingDelay();
+      return reply.code(400).send({ error: "Invitación inválida o expirada" });
+    }
+
+    // Registro estructurado de auditoría
+    app.log.info(
+      {
+        event_type: "activation_completed",
+        actor: "system_onboarding",
+        client_id: tokenPayload.clientId,
+        tenant_id: tokenPayload.tenantId,
+        user_id: tokenPayload.userId,
+        timestamp: new Date().toISOString(),
+      },
+      "Activación de onboarding completada exitosamente",
+    );
+
+    await antiTimingDelay();
+    return { ok: true, message: "Cuenta activada exitosamente" };
   },
 );
 
