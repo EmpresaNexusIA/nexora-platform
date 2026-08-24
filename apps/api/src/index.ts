@@ -4,6 +4,8 @@ import Fastify from "fastify";
 import cookie from "@fastify/cookie";
 import cors from "@fastify/cors";
 import rateLimit from "@fastify/rate-limit";
+import swagger from "@fastify/swagger";
+import swaggerUi from "@fastify/swagger-ui";
 import { ZodTypeProvider, serializerCompiler, validatorCompiler } from "@fastify/type-provider-zod";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
@@ -41,6 +43,37 @@ await app.register(rateLimit, {
   redis: redis,
 });
 
+// --- Documentación OpenAPI ---
+await app.register(swagger, {
+  openapi: {
+    info: {
+      title: "Nexora Platform API",
+      description: "API pública y administrativa de Nexora Platform",
+      version: "1.0.0",
+    },
+    servers: [
+      {
+        url: config.isDev ? "http://localhost:3000" : `https://api.${config.cookie.domain}`,
+      },
+    ],
+    tags: [
+      { name: "Health", description: "Healthchecks y readiness" },
+      { name: "Auth", description: "Autenticación y sesiones" },
+      { name: "Onboarding", description: "Aprovisionamiento y activación de tenants" },
+      { name: "User", description: "Perfil y datos del usuario autenticado" },
+      { name: "Tenant", description: "Gestión del tenant" },
+    ],
+  },
+});
+
+await app.register(swaggerUi, {
+  routePrefix: "/docs",
+  uiConfig: {
+    docExpansion: "list",
+    deepLinking: true,
+  },
+});
+
 // --- Plugins de dominio ---
 // Se aplican sobre la instancia raíz para que hooks y decoradores
 // alcancen obligatoriamente a todas las rutas declaradas debajo.
@@ -51,32 +84,62 @@ await tenantPlugin(app);
 const antiTimingDelay = () => new Promise((resolve) => setTimeout(resolve, 200));
 
 // --- Compatibilidad: /health conserva la respuesta historica ---
-app.get("/health", { config: { rateLimit: false } }, async () => {
-  return { status: "ok", timestamp: new Date().toISOString() };
-});
+app.get(
+  "/health",
+  {
+    schema: {
+      tags: ["Health"],
+      summary: "Healthcheck básico",
+    },
+    config: { rateLimit: false },
+  },
+  async () => {
+    return { status: "ok", timestamp: new Date().toISOString() };
+  },
+);
 
 // --- Liveness: Fastify esta ejecutando el event loop ---
-app.get("/health/live", { config: { rateLimit: false } }, async () => {
-  return { status: "alive", timestamp: new Date().toISOString() };
-});
+app.get(
+  "/health/live",
+  {
+    schema: {
+      tags: ["Health"],
+      summary: "Liveness probe",
+    },
+    config: { rateLimit: false },
+  },
+  async () => {
+    return { status: "alive", timestamp: new Date().toISOString() };
+  },
+);
 
 // --- Readiness: la API puede trabajar con sus dependencias criticas ---
-app.get("/health/ready", { config: { rateLimit: false } }, async (_request, reply) => {
-  const result = await checkReadiness();
+app.get(
+  "/health/ready",
+  {
+    schema: {
+      tags: ["Health"],
+      summary: "Readiness probe",
+    },
+    config: { rateLimit: false },
+  },
+  async (_request, reply) => {
+    const result = await checkReadiness();
 
-  if (!result.ready) {
-    app.log.warn(
-      { checks: result.checks },
-      "Nexora API no esta lista para recibir trafico",
-    );
-  }
+    if (!result.ready) {
+      app.log.warn(
+        { checks: result.checks },
+        "Nexora API no esta lista para recibir trafico",
+      );
+    }
 
-  return reply.code(result.ready ? 200 : 503).send({
-    status: result.ready ? "ready" : "not_ready",
-    checks: result.checks,
-    timestamp: new Date().toISOString(),
-  });
-});
+    return reply.code(result.ready ? 200 : 503).send({
+      status: result.ready ? "ready" : "not_ready",
+      checks: result.checks,
+      timestamp: new Date().toISOString(),
+    });
+  },
+);
 
 // ============================================================
 //  POST /login — Autenticación
@@ -92,6 +155,9 @@ app.post(
   "/login",
   {
     schema: {
+      tags: ["Auth"],
+      summary: "Iniciar sesión",
+      description: "Autentica un usuario activo. El email se normaliza a minúsculas automáticamente.",
       body: loginBodySchema,
     },
     config: { rateLimit: { max: 10, timeWindow: "1 minute" } },
@@ -177,7 +243,23 @@ app.post(
   "/onboarding/activate",
   {
     schema: {
+      tags: ["Onboarding"],
+      summary: "Activar cuenta de tenant",
+      description:
+        "Consume un token de activación de un solo uso para activar un tenant, " +
+        "establecer la contraseña del usuario fundador y migrar los estados de " +
+        "cliente CRM, tenant y usuario a activos. El token se invalida permanentemente " +
+        "al consumirse. Rate limit: 3 intentos/15min por IP, 1 intento/5min por token.",
       body: onboardingActivateSchema,
+      response: {
+        200: z.object({
+          ok: z.literal(true),
+          message: z.string(),
+        }),
+        400: z.object({
+          error: z.string().describe("Mensaje uniforme para cualquier fallo de token o precondición"),
+        }),
+      },
     },
     // Rate limiting por IP: 3 intentos cada 15 minutos
     config: { rateLimit: { max: 3, timeWindow: "15 minutes" } },
@@ -246,111 +328,147 @@ app.post(
 // ============================================================
 //  POST /refresh — Renovar access token
 // ============================================================
-app.post("/refresh", async (request, reply) => {
-  const refreshToken = request.cookies?.refresh_token;
-  if (!refreshToken) {
-    return reply.code(401).send({ error: "No hay refresh token" });
-  }
-
-  try {
-    const payload = await verifyToken(refreshToken);
-    if (payload.type !== "refresh") {
-      return reply.code(401).send({ error: "Token inválido" });
+app.post(
+  "/refresh",
+  {
+    schema: {
+      tags: ["Auth"],
+      summary: "Renovar access token",
+      description: "Permite obtener un nuevo access token utilizando la cookie refresh_token válida.",
+    },
+  },
+  async (request, reply) => {
+    const refreshToken = request.cookies?.refresh_token;
+    if (!refreshToken) {
+      return reply.code(401).send({ error: "No hay refresh token" });
     }
 
-    const stored = await redis.get(`refresh:${payload.sub}`);
-    if (stored !== refreshToken) {
-      return reply.code(401).send({ error: "Sesión revocada" });
+    try {
+      const payload = await verifyToken(refreshToken);
+      if (payload.type !== "refresh") {
+        return reply.code(401).send({ error: "Token inválido" });
+      }
+
+      const stored = await redis.get(`refresh:${payload.sub}`);
+      if (stored !== refreshToken) {
+        return reply.code(401).send({ error: "Sesión revocada" });
+      }
+
+      const accessToken = await signAccessToken(payload.sub, payload.tenantId!);
+
+      reply.setCookie("access_token", accessToken, {
+        httpOnly: true,
+        secure: config.cookie.secure,
+        sameSite: "lax",
+        path: "/",
+        domain: config.cookie.domain,
+      });
+
+      return { accessToken };
+    } catch {
+      return reply.code(401).send({ error: "Refresh token inválido" });
     }
-
-    const accessToken = await signAccessToken(payload.sub, payload.tenantId!);
-
-    reply.setCookie("access_token", accessToken, {
-      httpOnly: true,
-      secure: config.cookie.secure,
-      sameSite: "lax",
-      path: "/",
-      domain: config.cookie.domain,
-    });
-
-    return { accessToken };
-  } catch {
-    return reply.code(401).send({ error: "Refresh token inválido" });
-  }
-});
+  },
+);
 
 // ============================================================
 //  POST /logout — Revocar refresh token
 // ============================================================
-app.post("/logout", async (request, reply) => {
-  const refreshToken = request.cookies?.refresh_token;
-  if (refreshToken) {
-    try {
-      const payload = await verifyToken(refreshToken);
-      await redis.del(`refresh:${payload.sub}`);
-    } catch {
-      // Token inválido — igual limpiamos cookies
+app.post(
+  "/logout",
+  {
+    schema: {
+      tags: ["Auth"],
+      summary: "Cerrar sesión",
+      description: "Invalida el refresh token en Redis y elimina las cookies HTTP de autenticación.",
+    },
+  },
+  async (request, reply) => {
+    const refreshToken = request.cookies?.refresh_token;
+    if (refreshToken) {
+      try {
+        const payload = await verifyToken(refreshToken);
+        await redis.del(`refresh:${payload.sub}`);
+      } catch {
+        // Token inválido — igual limpiamos cookies
+      }
     }
-  }
 
-  reply.clearCookie("access_token", { path: "/" });
-  reply.clearCookie("refresh_token", { path: "/" });
-  return { ok: true };
-});
+    reply.clearCookie("access_token", { path: "/" });
+    reply.clearCookie("refresh_token", { path: "/" });
+    return { ok: true };
+  },
+);
 
 // ============================================================
 //  GET /me — Ruta protegida (demuestra el wrapper de tenant)
 // ============================================================
 app.get(
   "/me",
-  { config: { required: true, withTenant: true } },
+  {
+    schema: {
+      tags: ["User"],
+      summary: "Perfil del usuario autenticado",
+      description: "Retorna los datos del usuario autenticado bajo el contexto de su tenant.",
+    },
+    config: { required: true, withTenant: true },
+  },
   async (request, reply) => {
-  if (!request.userId || !request.tenantId) {
-    return reply.code(401).send({ error: "No autenticado" });
-  }
+    if (!request.userId || !request.tenantId) {
+      return reply.code(401).send({ error: "No autenticado" });
+    }
 
-  const userInfo = await app.withTenant(request, async (db) => {
-    const result = await db.execute(sql`
-      SELECT id, email, name, status
-      FROM users
-      WHERE id = ${request.userId}
-    `);
-    return result.rows[0];
-  });
+    const userInfo = await app.withTenant(request, async (db) => {
+      const result = await db.execute(sql`
+        SELECT id, email, name, status
+        FROM users
+        WHERE id = ${request.userId}
+      `);
+      return result.rows[0];
+    });
 
-  if (!userInfo) {
-    return reply.code(404).send({ error: "Usuario no encontrado" });
-  }
+    if (!userInfo) {
+      return reply.code(404).send({ error: "Usuario no encontrado" });
+    }
 
-  return userInfo;
-});
+    return userInfo;
+  },
+);
 
 // ============================================================
 //  GET /tenants/me — Datos del tenant del usuario
 // ============================================================
 app.get(
   "/tenants/me",
-  { config: { required: true, withTenant: true } },
+  {
+    schema: {
+      tags: ["Tenant"],
+      summary: "Datos del tenant actual",
+      description: "Retorna la información del tenant al cual pertenece el usuario autenticado.",
+    },
+    config: { required: true, withTenant: true },
+  },
   async (request, reply) => {
-  if (!request.tenantId) {
-    return reply.code(401).send({ error: "No autenticado" });
-  }
+    if (!request.tenantId) {
+      return reply.code(401).send({ error: "No autenticado" });
+    }
 
-  const tenant = await app.withTenant(request, async (db) => {
-    const result = await db.execute(sql`
-      SELECT id, name, slug, status
-      FROM tenants
-      WHERE id = ${request.tenantId}
-    `);
-    return result.rows[0];
-  });
+    const tenant = await app.withTenant(request, async (db) => {
+      const result = await db.execute(sql`
+        SELECT id, name, slug, status
+        FROM tenants
+        WHERE id = ${request.tenantId}
+      `);
+      return result.rows[0];
+    });
 
-  if (!tenant) {
-    return reply.code(404).send({ error: "Tenant no encontrado" });
-  }
+    if (!tenant) {
+      return reply.code(404).send({ error: "Tenant no encontrado" });
+    }
 
-  return tenant;
-});
+    return tenant;
+  },
+);
 
 // ============================================================
 //  Startup
@@ -362,4 +480,5 @@ app.listen({ port: config.port, host: config.host }, (err, address) => {
   }
   app.log.info(`Nexora API escuchando en ${address}`);
   app.log.info(`  Rol: api_user (NOBYPASSRLS) | Auth: RS256 | Redis: refresh+ratelimit`);
+  app.log.info(`  Documentación OpenAPI en ${address}/docs`);
 });
