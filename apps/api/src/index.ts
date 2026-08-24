@@ -321,7 +321,7 @@ app.post(
     );
 
     await antiTimingDelay();
-    return { ok: true, message: "Cuenta activada exitosamente" };
+    return { ok: true as const, message: "Cuenta activada exitosamente" };
   },
 );
 
