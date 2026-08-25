@@ -9,12 +9,15 @@
     "start": "tsx src/index.ts",
     "lint": "pnpm run typecheck",
     "typecheck": "tsc --noEmit",
-    "pretypecheck": "pnpm --filter @nexora/context build"
+    "pretypecheck": "pnpm --filter @nexora/context build",
+    "test": "vitest run"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.2",
     "@fastify/cors": "^11.0.1",
     "@fastify/rate-limit": "^10.2.2",
+    "@fastify/swagger": "^9.4.2",
+    "@fastify/swagger-ui": "^5.2.1",
     "@fastify/type-provider-zod": "^1.0.0",
     "@nexora/context": "workspace:*",
     "@nexora/database": "workspace:*",
@@ -32,6 +35,7 @@
     "@types/node": "^24.0.0",
     "@types/pg": "^8.15.0",
     "tsx": "^4.19.2",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10"
   }
 }
