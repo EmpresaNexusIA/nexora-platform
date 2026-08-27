@@ -32,7 +32,7 @@ esac
 # ---- Verdades del organismo (solo cambian tras un transplante) ----
 DNI_ESPERADO="7670634338808201248"
 PULSO_ESPERADO="3|0|6|7|11"  # pulso tras 0010 (frontera onboarding y activación)
-ESPERADOS="nexora-postgres nexora_traefik nexora_whoami nexora-redis nexora-minio nexora-qdrant"
+ESPERADOS="nexora-postgres nexora_traefik nexora_whoami nexora-redis nexora-minio nexora-qdrant nexora_api"
 
 OKS=0
 FALLAS=0
@@ -59,7 +59,7 @@ if docker ps -a --format "{{.Names}}" 2>/dev/null | grep -qx "nexora_traefik" \
   sleep 3
 fi
 
-# ---- 2. Los 6 y solo los 6 (REGLA MUSEO + familia F5 completa) -------
+# ---- 2. Los 7 y solo los 7 (REGLA MUSEO + familia F5 completa) -------
 FALTAN=""
 for C in $ESPERADOS; do
   docker ps --format "{{.Names}}" 2>/dev/null | grep -qx "$C" || FALTAN="$FALTAN $C"
@@ -68,9 +68,9 @@ EXTRAS=$(comm -13 <(printf "%s\n" $ESPERADOS | sort) \
                  <(docker ps --format "{{.Names}}" 2>/dev/null | sort) | tr "\n" " ")
 if [ -z "$FALTAN" ]; then
   if [ -z "$EXTRAS" ]; then
-    tildar "2. Contenedores: los 6 y solo los 6 (museo respetado)"
+    tildar "2. Contenedores: los 7 y solo los 7 (museo respetado)"
   else
-    tildar "2. Contenedores: los 6 arriba (⚠ ojo, extra(s) corriendo:$EXTRAS)"
+    tildar "2. Contenedores: los 7 arriba (⚠ ojo, extra(s) corriendo:$EXTRAS)"
   fi
 else
   cruzar "2. Faltan contenedores:$FALTAN"
