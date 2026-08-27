@@ -1,0 +1,12 @@
+.git
+.env
+**/.env
+**/keys
+**/node_modules
+node_modules
+**/dist
+dist
+backups
+secrets
+*.log
+**/*.tsbuildinfo

@@ -7,3 +7,4 @@ include:
   - redis/compose.yaml
   - minio/compose.yaml
   - qdrant/compose.yaml
+  - api/compose.yaml

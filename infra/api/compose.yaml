@@ -1,0 +1,39 @@
+services:
+  api:
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    container_name: nexora_api
+    restart: unless-stopped
+    env_file:
+      - path: ../../secrets/api-container.env
+        required: false
+    volumes:
+      - ../../apps/api/keys:/app/apps/api/keys:ro
+    ports:
+      - "127.0.0.1:3001:3001"
+    networks:
+      - nexora_net
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3001/health/live').then(r => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=nexora_net"
+      - "traefik.http.routers.api.rule=Host(`api.nexora.localhost`)"
+      - "traefik.http.routers.api.entrypoints=websecure"
+      - "traefik.http.routers.api.tls=true"
+      - "traefik.http.services.api.loadbalancer.server.port=3001"
+
+networks:
+  nexora_net:
+    external: true
