@@ -14,9 +14,6 @@ services:
       - "127.0.0.1:3001:3001"
     networks:
       - nexora_net
-    depends_on:
-      - postgres
-      - redis
     healthcheck:
       test:
         [
