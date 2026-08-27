@@ -7,7 +7,7 @@ services:
     restart: unless-stopped
     env_file:
       - path: ../../secrets/api-container.env
-        required: true
+        required: false
     volumes:
       - ../../apps/api/keys:/app/apps/api/keys:ro
     ports:
