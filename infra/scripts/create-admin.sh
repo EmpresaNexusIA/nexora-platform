@@ -107,6 +107,17 @@ docker exec -i "$CONTAINER" \
   -v password_hash="$HASH" <<'SQL'
 BEGIN;
 
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.roles
+    WHERE tenant_id IS NULL AND lower(name) = 'platform founder' AND deleted_at IS NULL
+  ) THEN
+    RAISE EXCEPTION 'Falta aplicar migración 0012: El rol global Platform Founder no existe en la base de datos.';
+  END IF;
+END
+$$;
+
 INSERT INTO public.tenants (id, name, slug)
 VALUES (:'tenant_id'::uuid, :'tenant_name', :'tenant_slug')
 ON CONFLICT (slug) DO UPDATE
@@ -130,7 +141,7 @@ SELECT
   'active',
   :'password_hash'
 FROM public.tenants t
-LEFT JOIN public.roles r ON r.tenant_id IS NULL AND lower(r.name) = 'platform founder' AND r.deleted_at IS NULL
+JOIN public.roles r ON r.tenant_id IS NULL AND lower(r.name) = 'platform founder' AND r.deleted_at IS NULL
 WHERE t.slug = :'tenant_slug'
 ON CONFLICT (email) DO UPDATE
 SET tenant_id = EXCLUDED.tenant_id,
