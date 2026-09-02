@@ -75,17 +75,20 @@ describe.runIf(isDbAvailable)("Platform Identity and RBAC Foundation (DB Integra
     const tenantId = "00000000-0000-0000-0000-000000000055";
     const userId = "00000000-0000-0000-0000-000000000056";
 
+    const client = await adminPool.connect();
     try {
-      await adminPool.query(
+      await client.query("BEGIN");
+
+      await client.query(
         "INSERT INTO public.tenants (id, name, slug) VALUES ($1, 'Tenant Comercial Test', 'tenant-comercial-test') ON CONFLICT DO NOTHING",
         [tenantId],
       );
-      await adminPool.query(
+      await client.query(
         "INSERT INTO public.users (id, tenant_id, email, status, role_id) VALUES ($1, $2, 'comercial@test.com', 'active', NULL) ON CONFLICT DO NOTHING",
         [userId, tenantId],
       );
 
-      const res = await adminPool.query(`
+      const res = await client.query(`
         SELECT p.name
         FROM public.users u
         JOIN public.roles r ON r.id = u.role_id
@@ -98,8 +101,8 @@ describe.runIf(isDbAvailable)("Platform Identity and RBAC Foundation (DB Integra
       expect(perms).not.toContain("platform:control:read");
       expect(perms).not.toContain("platform:control:manage");
     } finally {
-      await adminPool.query("DELETE FROM public.users WHERE id = $1", [userId]);
-      await adminPool.query("DELETE FROM public.tenants WHERE id = $1", [tenantId]);
+      await client.query("ROLLBACK").catch(() => {});
+      client.release();
     }
   });
 
