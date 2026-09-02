@@ -1,0 +1,96 @@
+openapi: 3.0.3
+info:
+  title: Nexora API — Onboarding
+  version: "1.0.0"
+  description: Endpoint público de activación de cuentas (bloque 0010).
+    Respuestas indistinguibles a propósito para token inválido/vencido/usado (seguridad).
+paths:
+  /onboarding/activate:
+    post:
+      summary: Activar cuenta de cliente (primer ingreso)
+      description: >
+        Consume el token de invitación (un solo uso, TTL 48h), valida la contraseña
+        (mín 12, mayúscula, minúscula, número, símbolo), hashea con bcrypt cost 10 y
+        activa de forma atómica cliente + tenant + usuario vía la función angosta
+        `complete_client_activation()` (SECURITY DEFINER, EXECUTE solo api_user).
+        Rate limit: 3 intentos / 15 min por IP + 1 intento / 5 min por token.
+      tags: [Onboarding]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OnboardingActivateRequest"
+            example:
+              token: "abc123...base64url"
+              password: "ClaveSegura2026!"
+      responses:
+        "200":
+          description: Cuenta activada exitosamente
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OnboardingActivateResponse"
+        "400":
+          description: Invitación inválida, expirada o ya usada (respuesta indistinguible)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+              example:
+                error: "Invitación inválida o expirada"
+        "429":
+          description: Demasiados intentos (rate limit)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  schemas:
+    OnboardingActivateRequest:
+      type: object
+      additionalProperties: false
+      required: [token, password]
+      properties:
+        token:
+          type: string
+          minLength: 1
+          description: Token de invitación (32 bytes base64url) recibido por el canal acordado
+        password:
+          type: string
+          minLength: 12
+          description: |
+            Contraseña nueva del cliente. Debe cumplir:
+            - mínimo 12 caracteres
+            - al menos una mayúscula
+            - al menos una minúscula
+            - al menos un número
+            - al menos un símbolo
+    OnboardingActivateResponse:
+      type: object
+      required: [ok, message]
+      properties:
+        ok:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "Cuenta activada exitosamente"
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          example: "Invitación inválida o expirada"
+
+# ============================================================
+# NOTAS PARA EL DESARROLLADOR
+# - El esquema Zod de la API (fuente canónica) está en
+#   apps/api/src/index.ts → `onboardingActivateSchema`.
+# - Si se monta con @fastify/swagger, registrar este documento
+#   como spec base y marcar la ruta como pública (sin auth).
+# - Las respuestas 400 son idénticas para inexistente/vencido/usado
+#   (no revelar la causa — seguridad, ver threat model del onboarding).
+# ============================================================
