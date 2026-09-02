@@ -31,7 +31,7 @@ esac
 
 # ---- Verdades del organismo (solo cambian tras un transplante) ----
 DNI_ESPERADO="7670634338808201248"
-PULSO_ESPERADO="3|0|6|7|11"  # pulso tras 0010 (frontera onboarding y activación)
+PULSO_ESPERADO="3|0|6|7|12"  # pulso tras 0012 (identidad de plataforma)
 ESPERADOS="nexora-postgres nexora_traefik nexora_whoami nexora-redis nexora-minio nexora-qdrant nexora_api"
 
 OKS=0
