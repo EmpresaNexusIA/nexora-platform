@@ -9,6 +9,7 @@
 #   ADMIN_PASSWORD="..." bash infra/scripts/create-admin.sh
 #
 # bcrypt cost 10, igual que la API B1.
+# Asigna el rol global 'Platform Founder' al usuario admin.
 # Las operaciones SQL se ejecutan como nexora_admin, nunca como runtime API.
 # ============================================================
 
@@ -94,7 +95,7 @@ if [[ ! "$HASH" =~ ^\$2[aby]\$ ]]; then
 fi
 ok "Hash bcrypt generado: ${HASH:0:20}..."
 
-printf 'Insertando tenant y usuario en una única transacción...\n'
+printf 'Insertando tenant, rol Platform Founder y usuario en una única transacción...\n'
 docker exec -i "$CONTAINER" \
   psql -X -U "$DB_USER" -d "$DB_NAME" -v ON_ERROR_STOP=1 \
   -v tenant_id="$TENANT_ID" \
@@ -106,6 +107,17 @@ docker exec -i "$CONTAINER" \
   -v password_hash="$HASH" <<'SQL'
 BEGIN;
 
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.roles
+    WHERE tenant_id IS NULL AND lower(name) = 'platform founder' AND deleted_at IS NULL
+  ) THEN
+    RAISE EXCEPTION 'Falta aplicar migración 0012: El rol global Platform Founder no existe en la base de datos.';
+  END IF;
+END
+$$;
+
 INSERT INTO public.tenants (id, name, slug)
 VALUES (:'tenant_id'::uuid, :'tenant_name', :'tenant_slug')
 ON CONFLICT (slug) DO UPDATE
@@ -114,6 +126,7 @@ SET name = EXCLUDED.name;
 INSERT INTO public.users (
   id,
   tenant_id,
+  role_id,
   email,
   name,
   status,
@@ -122,14 +135,17 @@ INSERT INTO public.users (
 SELECT
   :'user_id'::uuid,
   t.id,
+  r.id AS role_id,
   :'admin_email',
   :'admin_name',
   'active',
   :'password_hash'
 FROM public.tenants t
+JOIN public.roles r ON r.tenant_id IS NULL AND lower(r.name) = 'platform founder' AND r.deleted_at IS NULL
 WHERE t.slug = :'tenant_slug'
 ON CONFLICT (email) DO UPDATE
 SET tenant_id = EXCLUDED.tenant_id,
+    role_id = EXCLUDED.role_id,
     name = EXCLUDED.name,
     password_hash = EXCLUDED.password_hash,
     status = 'active';
@@ -140,16 +156,18 @@ SELECT
   u.email,
   u.name,
   u.status,
+  r.name AS role_name,
   t.name AS tenant_name
 FROM public.users u
 JOIN public.tenants t ON t.id = u.tenant_id
+LEFT JOIN public.roles r ON r.id = u.role_id
 WHERE u.email = :'admin_email';
 SQL
 
 unset HASH
 
 printf '%s\n' '------------------------------------------------------------'
-ok 'Usuario admin creado o actualizado'
+ok 'Usuario admin creado o actualizado con rol Platform Founder'
 printf '  Email:  %s\n' "$EMAIL"
 printf '  Tenant: %s (%s)\n' "$TENANT_NAME" "$TENANT_ID"
 printf '  La contraseña no se imprime ni se guarda en el script.\n\n'
