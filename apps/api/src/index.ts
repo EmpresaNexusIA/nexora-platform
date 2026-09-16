@@ -16,6 +16,7 @@ import { checkReadiness } from "./lib/readiness.js";
 import { consumeActivationToken } from "./lib/activation-token.js";
 import { authPlugin } from "./plugins/auth.js";
 import { tenantPlugin } from "./plugins/tenant.js";
+import { leadsPlugin } from "./plugins/leads.js";
 import { pool } from "@nexora/database";
 import { sql } from "drizzle-orm";
 
@@ -79,6 +80,9 @@ await app.register(swaggerUi, {
 // alcancen obligatoriamente a todas las rutas declaradas debajo.
 await authPlugin(app);
 await tenantPlugin(app);
+await leadsPlugin(app);
+
+// Tags el tag CRM al OpenAPI (opcional pero prolijo)
 
 // Delay anti-timing para prevenir timing attacks en rutas sensibles
 const antiTimingDelay = () => new Promise((resolve) => setTimeout(resolve, 200));
