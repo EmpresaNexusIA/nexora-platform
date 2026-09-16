@@ -1,12 +1,13 @@
 // NEXORA · Panel → Pedidos (pestaña crítica del vendedor)
 import { getDB } from "@/lib/data";
 import { PedidosClient } from "./PedidosClient";
+import { requireTiendaActual } from "@/lib/sesion";
 
 export const dynamic = "force-dynamic";
 
 export default async function PedidosPage() {
   const db = await getDB();
-  const tienda = await db.getTiendaPorSlug("panaderia-maria");
+  const tienda = await requireTiendaActual();
   if (!tienda) return null;
   const pedidos = await db.getPedidos(tienda.id);
   return <PedidosClient pedidos={pedidos} tienda={tienda} />;

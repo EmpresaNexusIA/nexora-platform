@@ -7,10 +7,11 @@ import { PLANES } from "@/lib/constants";
 import { ModoSwitcher } from "@/components/ThemeControls";
 import { ChatWidget } from "@/components/ChatWidget";
 import { PanelNav } from "./nav";
+import { requireTiendaActual } from "@/lib/sesion";
 
 export default async function PanelLayout({ children }: { children: React.ReactNode }) {
   const db = await getDB();
-  const tienda = await db.getTiendaPorSlug("panaderia-maria"); // demo: tienda actual
+  const tienda = await requireTiendaActual(); // demo: tienda actual
 
   return (
     <div data-tema={tienda?.tema || "ambar"} className="mx-auto flex min-h-screen max-w-md flex-col">

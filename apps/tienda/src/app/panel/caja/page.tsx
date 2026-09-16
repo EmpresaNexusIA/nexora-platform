@@ -3,12 +3,13 @@ import { getDB } from "@/lib/data";
 import { fmtMoney, fmtFechaLarga, hoyISOlocal } from "@/lib/format";
 import { METODOS_PAGO } from "@/lib/constants";
 import { Download, TrendingUp } from "lucide-react";
+import { requireTiendaActual } from "@/lib/sesion";
 
 export const dynamic = "force-dynamic";
 
 export default async function CajaPage() {
   const db = await getDB();
-  const tienda = await db.getTiendaPorSlug("panaderia-maria");
+  const tienda = await requireTiendaActual();
   if (!tienda) return null;
   const caja = await db.getCaja(tienda.id);
   const maxBar = Math.max(1, ...caja.ultimos7Dias.map((d) => d.total));
