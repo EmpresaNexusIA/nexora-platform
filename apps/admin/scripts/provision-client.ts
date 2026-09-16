@@ -74,7 +74,7 @@ program
 
       // 1. Verificar cliente en estado 'vendido'
       const clientRes = await dbClient.query(
-        "SELECT id, nombre, estado, provisioned_tenant_id FROM public.clientes WHERE id = $1 FOR UPDATE",
+        "SELECT id, nombre, estado, provisioned_tenant_id, telefono, rubro FROM public.clientes WHERE id = $1 FOR UPDATE",
         [clientId],
       );
 
@@ -105,6 +105,15 @@ program
       );
       const userId = userRes.rows[0].id;
 
+      // 3.5 · NUEVO (merge tienda): el tenant nace CON su comercio listo.
+      // Defaults del esquema: plan gratis, publicada=false (la activa el
+      // vendedor); whatsapp/rubro heredados del alta en el CRM.
+      const comercioRes = await dbClient.query(
+        "INSERT INTO public.comercios (tenant_id, nombre, whatsapp, rubro) VALUES ($1, $2, $3, $4) RETURNING id",
+        [tenantId, tenantName, clientRow.telefono || "", clientRow.rubro || ""],
+      );
+      const comercioId = comercioRes.rows[0].id;
+
       // 4. Vincular cliente CRM con tenant y actualizar estado a 'onboarding'
       await dbClient.query(
         "UPDATE public.clientes SET estado = 'onboarding', provisioned_tenant_id = $1, actualizado_en = now() WHERE id = $2",
@@ -127,6 +136,7 @@ program
         client_id: clientId,
         tenant_id: tenantId,
         user_id: userId,
+        comercio_id: comercioId,
         timestamp: new Date().toISOString(),
       };
 
@@ -141,6 +151,10 @@ program
       console.log(`Tenant ID:       ${tenantId}`);
       console.log(`User ID:         ${userId}`);
       console.log(`User Email:      ${normalizedEmail}`);
+      console.log(`Comercio ID:     ${comercioId}`);
+      console.log(`Tienda URL:      /t/${tenantSlug}  (activa cuando el tenant se active)`);
+      console.log(`Comercio ID:     ${comercioId}`);
+      console.log(`Tienda URL:      https://${tenantSlug}.TU-DOMINIO  (o /t/${tenantSlug})`);
       console.log(`Activation Link: ${activationUrl}`);
       console.log("=======================================================\n");
 
