@@ -236,8 +236,9 @@ export const demoDB: NexoraDB = {
     productos.push(p);
     return { ok: true, producto: p };
   },
-  async setDisponible(productoId, v) {
-    const p = productos.find((x) => x.id === productoId);
+  async setDisponible(comercioId, productoId, v) {
+    // Fase 1.6 · P1: scoping por comercio (paridad con platform.ts).
+    const p = productos.find((x) => x.id === productoId && x.comercioId === comercioId);
     if (p) p.disponible = v;
   },
 
@@ -347,9 +348,10 @@ export const demoDB: NexoraDB = {
     return { ok: true, pedido, items, waUrl, tokenSeguimiento: pedido.token };
   },
 
-  async cambiarEstado(pedidoId, nuevo, reintegrarStock) {
+  async cambiarEstado(comercioId, pedidoId, nuevo, reintegrarStock) {
+    // Fase 1.6 · P1: scoping por comercio (paridad con platform.ts).
     const p = pedidos.find((x) => x.id === pedidoId);
-    if (!p) return { ok: false, error: "Pedido no encontrado." };
+    if (!p || p.comercioId !== comercioId) return { ok: false, error: "Pedido no encontrado." };
     if (!TRANSICIONES[p.estado].includes(nuevo)) {
       return { ok: false, error: `No se puede pasar de "${p.estado}" a "${nuevo}".` };
     }
@@ -383,8 +385,9 @@ export const demoDB: NexoraDB = {
     return { ok: true };
   },
 
-  async marcarPagado(pedidoId, v) {
-    const p = pedidos.find((x) => x.id === pedidoId);
+  async marcarPagado(comercioId, pedidoId, v) {
+    // Fase 1.6 · P1: scoping por comercio (paridad con platform.ts).
+    const p = pedidos.find((x) => x.id === pedidoId && x.comercioId === comercioId);
     if (p) p.pagado = v;
   },
 
@@ -393,8 +396,9 @@ export const demoDB: NexoraDB = {
       ? [...clientes].sort((a, b) => b.pedidosFinalizados - a.pedidosFinalizados)
       : [];
   },
-  async setFrecuente(id, esFrecuente, descuento) {
-    const c = clientes.find((x) => x.id === id);
+  async setFrecuente(comercioId, id, esFrecuente, descuento) {
+    // Fase 1.6 · P1: scoping por comercio (paridad con platform.ts).
+    const c = clientes.find((x) => x.id === id && x.comercioId === comercioId);
     if (c) {
       c.esFrecuente = esFrecuente;
       c.descuentoEspecial = descuento;
