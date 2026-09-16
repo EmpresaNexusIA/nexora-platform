@@ -28,3 +28,7 @@ package-lock.json
 
 # TypeScript incremental build artifacts
 *.tsbuildinfo
+
+# Next.js (apps/tienda) — artefactos de build, no versionar
+.next/
+next-env.d.ts

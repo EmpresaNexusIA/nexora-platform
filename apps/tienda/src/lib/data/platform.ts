@@ -181,8 +181,11 @@ export const platformDB: NexoraDB = {
     }
   },
 
-  async setDisponible(productoId, v) {
-    await pool().query(`update productos set disponible = $1, updated_at = now() where id = $2`, [v, productoId]);
+  async setDisponible(comercioId, productoId, v) {
+    // Fase 1.6 · P1: scoping por comercio de la sesión.
+    await pool().query(
+      `update productos set disponible = $3, updated_at = now()
+       where id = $2 and comercio_id = $1`, [comercioId, productoId, v]);
   },
 
   async crearPedido(input: CrearPedidoInput): Promise<ResultadoPedido> {
@@ -223,16 +226,26 @@ export const platformDB: NexoraDB = {
     return { pedido: aPedido(rows[0]) as never, items: items.rows.map(aItem) as never, tienda };
   },
 
-  async cambiarEstado(pedidoId, nuevo, reintegrarStock) {
+  async cambiarEstado(comercioId, pedidoId, nuevo, reintegrarStock) {
+    // Fase 1.6 · P1: la función SQL es SECURITY DEFINER y recibe solo el id
+    // del pedido, así que validamos la pertenencia ANTES. comercio_id es
+    // inmutable (se fija en el insert), así que no hay TOCTOU entre el
+    // chequeo y la llamada.
+    const { rows: dueno } = await pool().query(
+      `select comercio_id from pedidos where id = $1 and deleted_at is null`, [pedidoId]);
+    if (!dueno[0] || (dueno[0].comercio_id as string) !== comercioId) {
+      return { ok: false, error: "Pedido no encontrado." };
+    }
     const { rows } = await pool().query(
       `select public.cambiar_estado_pedido($1, $2, $3) as res`, [pedidoId, nuevo, reintegrarStock]);
     return rows[0].res;
   },
 
-  async marcarPagado(pedidoId, v) {
+  async marcarPagado(comercioId, pedidoId, v) {
+    // Fase 1.6 · P1: scoping por comercio de la sesión.
     await pool().query(
-      `update pedidos set pagado = $1, pagado_marcado_en = case when $1 then now() else null end,
-       updated_at = now() where id = $2`, [v, pedidoId]);
+      `update pedidos set pagado = $3, pagado_marcado_en = case when $3 then now() else null end,
+       updated_at = now() where id = $2 and comercio_id = $1`, [comercioId, pedidoId, v]);
   },
 
   async getClientes(comercioId) {
@@ -247,11 +260,12 @@ export const platformDB: NexoraDB = {
     }));
   },
 
-  async setFrecuente(id, esFrecuente, descuento) {
+  async setFrecuente(comercioId, id, esFrecuente, descuento) {
+    // Fase 1.6 · P1: scoping por comercio de la sesión.
     await pool().query(
-      `update clientes_frecuentes set es_frecuente = $1, descuento_especial = $2,
-       origen = 'manual', updated_at = now() where id = $3`,
-      [esFrecuente, Math.max(0, Math.min(90, descuento)), id]);
+      `update clientes_frecuentes set es_frecuente = $2, descuento_especial = $3,
+       origen = 'manual', updated_at = now() where id = $4 and comercio_id = $1`,
+      [comercioId, esFrecuente, Math.max(0, Math.min(90, descuento)), id]);
   },
 
   async getCaja(comercioId) {

@@ -49,16 +49,23 @@ export async function crearPedidoAction(params: {
 }
 
 export async function cambiarEstadoAction(pedidoId: string, nuevo: EstadoPedido, reintegrarStock: boolean) {
+  // Fase 1.6 · P1: el ID solo no alcanza — verificamos que el pedido sea del
+  // comercio de la sesión (N1: cada comercio lo suyo). El comercioId sale de
+  // la cookie/JWT, nunca del cliente.
+  const t = await getTiendaActual();
+  if (!t) return { ok: false, error: "Sin tienda" };
   const db = await getDB();
-  const res = await db.cambiarEstado(pedidoId, nuevo, reintegrarStock);
+  const res = await db.cambiarEstado(t.id, pedidoId, nuevo, reintegrarStock);
   revalidatePath("/panel/pedidos");
   revalidatePath("/panel/caja");
   return res;
 }
 
 export async function marcarPagadoAction(pedidoId: string, v: boolean) {
+  const t = await getTiendaActual();
+  if (!t) return { ok: false, error: "Sin tienda" };
   const db = await getDB();
-  await db.marcarPagado(pedidoId, v);
+  await db.marcarPagado(t.id, pedidoId, v);
   revalidatePath("/panel/pedidos");
   revalidatePath("/panel/caja");
   return { ok: true };
@@ -66,10 +73,11 @@ export async function marcarPagadoAction(pedidoId: string, v: boolean) {
 
 // ---------- Catálogo ----------
 export async function toggleDisponibleAction(productoId: string, v: boolean) {
-  const db = await getDB();
-  await db.setDisponible(productoId, v);
   const t = await getTiendaActual();
-  if (t) revalidatePath(`/t/${t.slug}`);
+  if (!t) return { ok: false, error: "Sin tienda" };
+  const db = await getDB();
+  await db.setDisponible(t.id, productoId, v);
+  revalidatePath(`/t/${t.slug}`);
   revalidatePath("/panel/catalogo");
   return { ok: true };
 }
@@ -102,8 +110,10 @@ export async function crearProductoAction(form: FormData) {
 
 // ---------- Clientes ----------
 export async function setFrecuenteAction(id: string, esFrecuente: boolean, descuento: number) {
+  const t = await getTiendaActual();
+  if (!t) return { ok: false, error: "Sin tienda" };
   const db = await getDB();
-  await db.setFrecuente(id, esFrecuente, Math.max(0, Math.min(90, descuento || 0)));
+  await db.setFrecuente(t.id, id, esFrecuente, Math.max(0, Math.min(90, descuento || 0)));
   revalidatePath("/panel/clientes");
   return { ok: true };
 }
