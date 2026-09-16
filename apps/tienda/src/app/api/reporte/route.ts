@@ -2,11 +2,12 @@
 
 import { getDB } from "@/lib/data";
 import { fmtMoney } from "@/lib/format";
+import { getTiendaActual } from "@/lib/sesion";
 
 export async function GET() {
   const db = await getDB();
-  const t = await db.getTiendaPorSlug("panaderia-maria"); // demo: tienda actual
-  if (!t) return new Response("sin tienda", { status: 404 });
+  const t = await getTiendaActual(); // demo: tienda actual
+  if (!t) return new Response("No autorizado", { status: 401 });
   const [caja, pedidos] = await Promise.all([db.getCaja(t.id), db.getPedidos(t.id)]);
   const hoy = caja.fecha;
   const deHoy = pedidos.filter((p) => p.estado !== "cancelado" && p.creadoEn.slice(0, 10) === hoy);

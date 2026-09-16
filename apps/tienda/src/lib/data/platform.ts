@@ -22,6 +22,9 @@ function pool(): Pool {
 function aComercio(r: Record<string, unknown>): Comercio {
   return {
     id: r.id as string, slug: r.slug as string, nombre: r.nombre as string,
+    // Campos que en la plataforma no viven en comercios (auth = users de platform):
+    duenoId: "", emailDueno: "", emailVerificado: true, fechaFinTrial: null,
+    contadorPedidos: Number(r.contador_pedidos ?? 0), eliminado: Boolean(r.deleted_at),
     whatsapp: (r.whatsapp as string) ?? "", rubro: (r.rubro as string) ?? "",
     moneda: (r.moneda as string) ?? "ARS", zonaHoraria: (r.zona_horaria as string) ?? "America/Cordoba",
     publicada: Boolean(r.publicada),
@@ -63,8 +66,10 @@ function aProducto(r: Record<string, unknown>) {
 function aPedido(r: Record<string, unknown>) {
   return {
     id: r.id as string, token: r.token as string, comercioId: r.comercio_id as string,
+    clienteId: (r.cliente_id as string) ?? "",
     numeroOrden: r.numero_orden as string,
     estado: r.estado as EstadoPedido, pagado: Boolean(r.pagado),
+    eliminado: Boolean(r.deleted_at),
     metodoPago: r.metodo_pago as never, modoEntrega: r.modo_entrega as never,
     direccionEntrega: (r.direccion_entrega as string) ?? "",
     clienteNombre: r.cliente_nombre as string, clienteEmail: r.cliente_email as string,
@@ -103,6 +108,13 @@ export const platformDB: NexoraDB = {
     return rows[0] ? aComercio(rows[0]) : null;
   },
 
+  async getTiendaPorTenantId(tenantId) {
+    const { rows } = await pool().query(
+      `select c.*, t.slug from comercios c join tenants t on t.id = c.tenant_id
+       where c.tenant_id = $1 and c.deleted_at is null limit 1`, [tenantId]);
+    return rows[0] ? aComercio(rows[0]) : null;
+  },
+
   async updateComercio(id, patch) {
     // Patch ya viene SANITIZADO desde guardarConfigAction (whitelist server-side)
     const mapa: Record<string, string> = {
@@ -131,14 +143,18 @@ export const platformDB: NexoraDB = {
     const { rows } = await pool().query(
       `select * from categorias where comercio_id = $1 and deleted_at is null
        order by orden, nombre`, [comercioId]);
-    return rows.map((r) => ({ id: r.id, nombre: r.nombre, orden: Number(r.orden) }));
+    return rows.map((r) => ({
+      id: r.id, comercioId: r.comercio_id, nombre: r.nombre,
+      orden: Number(r.orden), eliminado: Boolean(r.deleted_at),
+    }));
   },
 
   async crearCategoria(comercioId, nombre) {
     const { rows } = await pool().query(
-      `insert into categorias (comercio_id, nombre) values ($1, $2) returning id, nombre, orden`,
+      `insert into categorias (comercio_id, nombre) values ($1, $2) returning *`,
       [comercioId, nombre]);
-    return { id: rows[0].id, nombre: rows[0].nombre, orden: Number(rows[0].orden) };
+    const r = rows[0];
+    return { id: r.id, comercioId: r.comercio_id, nombre: r.nombre, orden: Number(r.orden), eliminado: false };
   },
 
   async getProductos(comercioId) {
@@ -224,7 +240,8 @@ export const platformDB: NexoraDB = {
       `select * from clientes_frecuentes where comercio_id = $1 and deleted_at is null
        order by pedidos_finalizados desc`, [comercioId]);
     return rows.map((r) => ({
-      id: r.id, nombreCliente: r.nombre_cliente, telefonoCliente: r.telefono_cliente,
+      id: r.id, comercioId: r.comercio_id, usuarioId: (r.perfil_id as string) ?? "",
+      nombreCliente: r.nombre_cliente, telefonoCliente: r.telefono_cliente,
       esFrecuente: Boolean(r.es_frecuente), descuentoEspecial: Number(r.descuento_especial),
       origen: r.origen, pedidosFinalizados: Number(r.pedidos_finalizados),
     }));

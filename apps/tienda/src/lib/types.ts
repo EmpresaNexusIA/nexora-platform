@@ -25,6 +25,7 @@ export interface Comercio {
   colorPrincipal: string; // legacy visual; ver `tema`
   tema: TemaId; // DIRECTIVA #1: presets + dark mode
   logoEmoji: string;
+  portadaUrl?: string; // foto de portada (opcional; cae al gradiente del tema)
   descripcion: string;
   dirRetiro: string;
   modoEntrega: ModoEntregaTienda;

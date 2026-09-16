@@ -36,6 +36,7 @@ export interface NexoraDB {
   // --- Tienda ---
   getTiendaPorSlug(slug: string): Promise<Comercio | null>;
   getTiendaPorId(id: string): Promise<Comercio | null>;
+  getTiendaPorTenantId?(tenantId: string): Promise<Comercio | null>;
   updateComercio(id: string, patch: Partial<Comercio>): Promise<void>;
   registrarVisita(slug: string): Promise<void>;
 

@@ -5,6 +5,7 @@
 
 import { revalidatePath } from "next/cache";
 import { getDB, ES_DEMO } from "./data";
+import { getTiendaActual as getTiendaActualSesion } from "./sesion";
 import { notificarPedidoNuevo } from "./notificar";
 import type { EstadoPedido, MetodoPagoId, ModoEntregaId, LineaCarrito, TemaId } from "./types";
 import type { Comercio } from "./types";
@@ -13,9 +14,9 @@ const baseUrl = () => process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3001
 
 // Dirección del comercio demo (en producción: desde auth/sesión)
 export async function getTiendaActual() {
-  const db = await getDB();
-  // DEMO: una sola tienda. REAL: comercio del usuario autenticado (RLS).
-  return db.getTiendaPorSlug("panaderia-maria");
+  // MODE_DEMO → panaderia-maria · PRODUCCIÓN → comercio del tenant de la sesión.
+  // (Lógica en ./sesion para reusarla desde middleware/rutas.)
+  return getTiendaActualSesion();
 }
 
 // ---------- Pedidos ----------
