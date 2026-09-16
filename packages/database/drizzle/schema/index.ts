@@ -4,3 +4,4 @@ export * from "./core/role.js";
 export * from "./core/permission.js";
 export * from "./core/roles-to-permissions.js";
 export * from "./crm/clientes.js";
+export * from "./tienda/index.js";
