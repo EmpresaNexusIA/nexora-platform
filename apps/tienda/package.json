@@ -1,0 +1,30 @@
+{
+  "name": "@nexora/tienda",
+  "version": "0.2.1",
+  "private": true,
+  "description": "Nexora - Tu tienda online en 5 minutos (SaaS multi-tenant, PWA, WhatsApp-first)",
+  "scripts": {
+    "dev": "next dev -H 0.0.0.0 -p 3001",
+    "build": "next build",
+    "start": "next start -H 0.0.0.0 -p 3001",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.901.0",
+    "lucide-react": "^0.453.0",
+    "next": "^14.2.32",
+    "pg": "^8.22.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.16.10",
+    "@types/pg": "^8.20.0",
+    "@types/react": "^18.3.11",
+    "@types/react-dom": "^18.3.0",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.13",
+    "typescript": "^5.6.2"
+  }
+}
