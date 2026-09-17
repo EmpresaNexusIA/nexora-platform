@@ -1,7 +1,8 @@
 "use client";
 
 // NEXORA · Botón "Salir" del panel (Fase 1.6).
-// DELETE /api/sesion → revoca el refresh en la plataforma (fire-and-forget)
+// DELETE /api/sesion → revoca el refresh en la plataforma (la tienda espera
+// la respuesta de la API para que la revocación en Redis sí o sí ocurra)
 // y limpia las cookies locales; después vuelve a /login.
 
 import { useState } from "react";

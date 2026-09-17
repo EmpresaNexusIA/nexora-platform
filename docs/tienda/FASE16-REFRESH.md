@@ -33,7 +33,7 @@ apps/tienda /api/sesion (POST)
   └─ cualquier fallo          → /login?next=… borrando ambas cookies
 
 Salir (LogoutButton del header, solo con sesión real)
-  └─ DELETE /api/sesion → revoca en la API (fire-and-forget) + borra cookies locales
+  └─ DELETE /api/sesion → revoca en la API (espera la respuesta) + borra cookies locales
 ```
 
 ## 2. Rotación en apps/api
@@ -106,8 +106,10 @@ wrappers con la clave pública: `verificarAccessToken` (`type: "access"`) y
 - `POST { accessToken, refreshToken }`: valida ambos con la clave pública y
   fija las dos cookies de arriba (7 días; la vigencia real la manda el `exp`).
 - `DELETE`: si hay `nx_refresh`, `POST {NEXT_PUBLIC_API_URL}/logout` con
-  forward de `Cookie: refresh_token=…` **fire-and-forget** (nunca falla el
-  logout local) y borra ambas cookies. Handlers tipados con `NextRequest`;
+  forward de `Cookie: refresh_token=…` **esperando la respuesta** (nunca
+  falla el logout local — en Vercel un fetch no esperado podría quedar sin
+  completar cuando termina la función serverless y la revocación en Redis
+  no se haría) y borra ambas cookies. Handlers tipados con `NextRequest`;
   no se exportan constantes (Next solo deja exportar handlers en route files).
 
 ### UI

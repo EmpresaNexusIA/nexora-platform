@@ -41,11 +41,13 @@ export async function POST(req: NextRequest) {
 export async function DELETE(req: NextRequest) {
   const refreshToken = req.cookies.get(COOKIE_REFRESH)?.value;
   if (refreshToken) {
-    // Revocación en la plataforma: fire-and-forget con forward de la cookie
-    // refresh_token. NUNCA falla el logout local (lo que importa es borrar
-    // las cookies de este dominio; si la API está caída, el access expira solo).
+    // Revocación en la plataforma con forward de la cookie refresh_token.
+    // Se ESPERA la respuesta: en Vercel la función serverless puede terminar
+    // antes de que complete un fetch no esperado y la revocación en Redis
+    // quedaría sin hacerse. El .catch garantiza que el logout local nunca
+    // falle (lo que importa es borrar las cookies de este dominio).
     const api = process.env.NEXT_PUBLIC_API_URL || "";
-    void fetch(`${api}/logout`, {
+    await fetch(`${api}/logout`, {
       method: "POST",
       headers: { cookie: `refresh_token=${refreshToken}` },
     }).catch(() => {});
