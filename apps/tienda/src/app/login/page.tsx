@@ -38,7 +38,7 @@ function LoginForm() {
         const rr = await fetch("/api/sesion", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ accessToken: j.accessToken }),
+          body: JSON.stringify({ accessToken: j.accessToken, refreshToken: j.refreshToken }),
         });
         if (!rr.ok) { setError("No se pudo iniciar la sesión."); return; }
         router.replace(siguiente);

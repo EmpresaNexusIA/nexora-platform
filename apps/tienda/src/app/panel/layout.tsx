@@ -2,11 +2,12 @@
 // (En producción: middleware exige sesión y dueño de la tienda — regla N1)
 
 import Link from "next/link";
-import { getDB } from "@/lib/data";
+import { getDB, ES_DEMO } from "@/lib/data";
 import { PLANES } from "@/lib/constants";
 import { ModoSwitcher } from "@/components/ThemeControls";
 import { ChatWidget } from "@/components/ChatWidget";
 import { PanelNav } from "./nav";
+import { LogoutButton } from "./logout-button";
 import { requireTiendaActual } from "@/lib/sesion";
 
 export default async function PanelLayout({ children }: { children: React.ReactNode }) {
@@ -30,7 +31,11 @@ export default async function PanelLayout({ children }: { children: React.ReactN
               </div>
             </div>
           </Link>
-          <ModoSwitcher />
+          <div className="flex items-center gap-2">
+            {/* Salir solo con sesión real: en demo el panel es abierto */}
+            {!ES_DEMO && <LogoutButton />}
+            <ModoSwitcher />
+          </div>
         </div>
       </header>
 
