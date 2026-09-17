@@ -11,7 +11,7 @@ import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { config } from "./config.js";
 import { redis } from "./lib/redis.js";
-import { signAccessToken, signRefreshToken, verifyToken } from "./lib/jwt.js";
+import { signAccessToken, signRefreshToken, verifyToken, type NexoraJWTPayload } from "./lib/jwt.js";
 import { checkReadiness } from "./lib/readiness.js";
 import { consumeActivationToken } from "./lib/activation-token.js";
 import { authPlugin } from "./plugins/auth.js";
@@ -223,7 +223,10 @@ app.post(
       domain: config.cookie.domain,
     });
 
-    return { accessToken, tenantId: user.tenant_id };
+    // refreshToken también por body: los consumidores cross-dominio
+    // (apps/tienda) no leen las cookies de la API — cada dominio materializa
+    // su propia cookie host-only (ver apps/tienda /api/sesion).
+    return { accessToken, refreshToken, tenantId: user.tenant_id };
   },
 );
 
@@ -330,48 +333,100 @@ app.post(
 );
 
 // ============================================================
-//  POST /refresh — Renovar access token
+//  POST /refresh — Renovar tokens (ROTACIÓN de refresh token)
 // ============================================================
 app.post(
   "/refresh",
   {
     schema: {
       tags: ["Auth"],
-      summary: "Renovar access token",
-      description: "Permite obtener un nuevo access token utilizando la cookie refresh_token válida.",
+      summary: "Renovar access token (rotación de refresh token)",
+      description:
+        "Renueva el access token usando la cookie refresh_token con ROTACIÓN: cada uso " +
+        "emite un refresh nuevo y guarda el presentado en refresh_prev:{sub} durante 15 s " +
+        "(ventana de gracia para requests concurrentes). Si el presentado es el prev y hay " +
+        "uno vigente, devuelve el vigente sin volver a rotar. Un token que no coincide ni " +
+        "con el vigente ni con el previo devuelve 401 (sesión revocada).",
+    },
+    // 20/min fijo a propósito: si aparecen 429 reales en producción, el log
+    // refresh_rate_limited es el dato con el que se ajusta el número — no se
+    // ajusta a ojo.
+    config: {
+      rateLimit: {
+        max: 20,
+        timeWindow: "1 minute",
+        onExceeded: (_req, key) =>
+          app.log.warn(
+            { event_type: "refresh_rate_limited", key },
+            "Rate limit excedido en /refresh",
+          ),
+      },
     },
   },
   async (request, reply) => {
-    const refreshToken = request.cookies?.refresh_token;
-    if (!refreshToken) {
+    const presentado = request.cookies?.refresh_token;
+    if (!presentado) {
       return reply.code(401).send({ error: "No hay refresh token" });
     }
 
+    let payload: NexoraJWTPayload;
     try {
-      const payload = await verifyToken(refreshToken);
-      if (payload.type !== "refresh") {
-        return reply.code(401).send({ error: "Token inválido" });
-      }
-
-      const stored = await redis.get(`refresh:${payload.sub}`);
-      if (stored !== refreshToken) {
-        return reply.code(401).send({ error: "Sesión revocada" });
-      }
-
-      const accessToken = await signAccessToken(payload.sub, payload.tenantId!);
-
-      reply.setCookie("access_token", accessToken, {
-        httpOnly: true,
-        secure: config.cookie.secure,
-        sameSite: "lax",
-        path: "/",
-        domain: config.cookie.domain,
-      });
-
-      return { accessToken };
+      payload = await verifyToken(presentado);
     } catch {
       return reply.code(401).send({ error: "Refresh token inválido" });
     }
+    if (payload.type !== "refresh") {
+      return reply.code(401).send({ error: "Token inválido" });
+    }
+
+    const claveVigente = `refresh:${payload.sub}`;
+    const clavePrev = `refresh_prev:${payload.sub}`;
+    const [vigente, prev] = await Promise.all([
+      redis.get(claveVigente),
+      redis.get(clavePrev),
+    ]);
+
+    const cookieOpts = {
+      httpOnly: true,
+      secure: config.cookie.secure,
+      path: "/",
+      domain: config.cookie.domain,
+    } as const;
+
+    // Es el vigente → ROTAR: el presentado pasa a prev (15 s) y se emite uno nuevo.
+    if (presentado === vigente) {
+      const [accessToken, nuevoRefresh] = await Promise.all([
+        signAccessToken(payload.sub, payload.tenantId!),
+        signRefreshToken(payload.sub, payload.tenantId!),
+      ]);
+      await Promise.all([
+        redis.set(clavePrev, presentado, "EX", 15),
+        redis.set(claveVigente, nuevoRefresh, "EX", 7 * 24 * 60 * 60),
+      ]);
+
+      reply.setCookie("access_token", accessToken, { ...cookieOpts, sameSite: "lax" });
+      reply.setCookie("refresh_token", nuevoRefresh, { ...cookieOpts, sameSite: "lax" });
+
+      return { accessToken, refreshToken: nuevoRefresh };
+    }
+
+    // Ventana de gracia: es el prev y todavía hay vigente → request concurrente.
+    // Devolvemos el vigente SIN rotar de nuevo (el prev expira a los 15 s).
+    if (presentado === prev && vigente) {
+      app.log.info(
+        { event_type: "refresh_prev_used", user_id: payload.sub, tenant_id: payload.tenantId },
+        "Refresh prev usado",
+      );
+
+      const accessToken = await signAccessToken(payload.sub, payload.tenantId!);
+      reply.setCookie("access_token", accessToken, { ...cookieOpts, sameSite: "lax" });
+      reply.setCookie("refresh_token", vigente, { ...cookieOpts, sameSite: "lax" });
+
+      return { accessToken, refreshToken: vigente };
+    }
+
+    // No matchea ni con el vigente ni con el prev: revocada, rotada y reusada, o ajena.
+    return reply.code(401).send({ error: "Sesión revocada" });
   },
 );
 
@@ -384,7 +439,9 @@ app.post(
     schema: {
       tags: ["Auth"],
       summary: "Cerrar sesión",
-      description: "Invalida el refresh token en Redis y elimina las cookies HTTP de autenticación.",
+      description:
+        "Revoca la sesión en Redis (borra refresh:{sub} y refresh_prev:{sub}) y elimina " +
+        "las cookies HTTP de autenticación.",
     },
   },
   async (request, reply) => {
@@ -392,7 +449,10 @@ app.post(
     if (refreshToken) {
       try {
         const payload = await verifyToken(refreshToken);
-        await redis.del(`refresh:${payload.sub}`);
+        await Promise.all([
+          redis.del(`refresh:${payload.sub}`),
+          redis.del(`refresh_prev:${payload.sub}`),
+        ]);
       } catch {
         // Token inválido — igual limpiamos cookies
       }

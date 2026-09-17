@@ -97,9 +97,12 @@ middleware deja pasar y el panel muestra la demo.
 
 ## 5. Límites conocidos / Fase 1.6 (refresco y multi-usuario)
 
-- **Sesión = access token**: cuando vence (`accessTtl` de apps/api) el dueño
-  vuelve a login. Fase 1.6: refresh token + rol/permiso (`users.role`) para
-  empleados del mostrador.
+- ~~**Sesión = access token**: cuando vence (`accessTtl` de apps/api) el
+  dueño vuelve a login.~~ **RESUELTO en Fase 1.6**
+  (`docs/tienda/FASE16-REFRESH.md`): refresh token con rotación, renovación
+  silenciosa desde el middleware (timeout 5 s) y logout real que revoca la
+  sesión en Redis.
+- Pendiente para empleados del mostrador: rol/permiso (`users.role`).
 - Si un tenant tuviera 2 comercios, `getTiendaPorTenantId` trae el primero —
   MVP: 1 usuario–vendedor ↔ 1 tenant ↔ 1 comercio (precondición misma del funnel).
 - `(demo)` `/panaderia` y `/quiero-tienda` siguen públicos: OK por diseño.
