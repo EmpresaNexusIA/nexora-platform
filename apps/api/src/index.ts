@@ -348,7 +348,20 @@ app.post(
         "uno vigente, devuelve el vigente sin volver a rotar. Un token que no coincide ni " +
         "con el vigente ni con el previo devuelve 401 (sesión revocada).",
     },
-    config: { rateLimit: { max: 20, timeWindow: "1 minute" } },
+    // 20/min fijo a propósito: si aparecen 429 reales en producción, el log
+    // refresh_rate_limited es el dato con el que se ajusta el número — no se
+    // ajusta a ojo.
+    config: {
+      rateLimit: {
+        max: 20,
+        timeWindow: "1 minute",
+        onExceeded: (_req, key) =>
+          app.log.warn(
+            { event_type: "refresh_rate_limited", key },
+            "Rate limit excedido en /refresh",
+          ),
+      },
+    },
   },
   async (request, reply) => {
     const presentado = request.cookies?.refresh_token;

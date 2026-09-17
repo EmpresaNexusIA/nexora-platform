@@ -66,7 +66,10 @@ Casos:
 
 Rate limit propio: 20 req/min. Un token robado que llega después de la
 rotación no matchea y la sesión queda rechazada (y el uso del prev queda
-registrado).
+registrado). El límite lleva `onExceeded` con log estructurado
+`{ event_type: "refresh_rate_limited", key }`: el 20/min se dejó fijo a
+propósito — si aparecen 429 reales en producción, ese log es el dato con el
+que se ajusta el número, no se ajusta a ojo.
 
 ### `POST /logout`
 `redis.del` de `refresh:{sub}` **y** `refresh_prev:{sub}` + limpieza de
@@ -82,11 +85,16 @@ circulación sigue vivo hasta su `exp` (ver decisiones).
 2. Access válido → `next()`.
 3. Access inválido + `nx_refresh` → `fetch` server-side
    `POST {NEXT_PUBLIC_API_URL}/refresh` con header
-   `cookie: refresh_token=<nx_refresh>` y **timeout de 5 s** (si aborta →
-   login; una API lenta no frena el render). Si responde OK, el
-   `accessToken` nuevo **se revalida con `verificarAccessToken`** y se hace
-   redirect a la MISMA URL (pathname + search) seteando `nx_session` (Lax)
-   y `nx_refresh` (Strict) nuevas.
+   `cookie: refresh_token=<nx_refresh>` y **timeout de 5 s** vía
+   `AbortSignal.timeout(5000)` (Edge + Node ≥ 17.3; si aborta → login; una
+   API lenta no frena el render). Si responde OK, el `accessToken` nuevo
+   **se revalida con `verificarAccessToken`** y se hace redirect a la MISMA
+   URL (pathname + search) seteando `nx_session` (Lax) y `nx_refresh`
+   (Strict) nuevas con **todos los atributos explícitos** (`httpOnly`,
+   `secure` en prod, `path: "/"`, `maxAge` 7 días y su `sameSite`): sin
+   `path: "/"` la cookie quedaría scoped al directorio del request y el
+   `DELETE /api/sesion` del logout no recibiría `nx_refresh`, fallando la
+   revocación en silencio.
 4. Cualquier fallo → redirect `/login?next=…` borrando ambas cookies.
 
 ### `src/lib/jwt.ts`

@@ -38,19 +38,15 @@ export async function middleware(req: NextRequest) {
   if (!refresh) return irALogin(req);
 
   let nuevo: { accessToken?: unknown; refreshToken?: unknown } | null = null;
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 5000); // 5 s máximo
   try {
     const r = await fetch(`${API}/refresh`, {
       method: "POST",
       headers: { cookie: `refresh_token=${refresh}` },
-      signal: ctrl.signal,
+      signal: AbortSignal.timeout(5000), // 5 s máximo (Edge + Node >= 17.3)
     });
     if (r.ok) nuevo = await r.json().catch(() => null);
   } catch {
     // timeout (abort) o API caída → sigue con nuevo = null → login
-  } finally {
-    clearTimeout(timer);
   }
 
   const nuevoAccess = typeof nuevo?.accessToken === "string" ? nuevo.accessToken : "";
@@ -60,18 +56,28 @@ export async function middleware(req: NextRequest) {
   if (!sesionNueva) return irALogin(req);
 
   // Renovación OK → a la MISMA URL (pathname + search) con cookies nuevas.
+  // TODOS los atributos van explícitos en cada set (no se hereda nada del
+  // POST de /api/sesion): sin path: "/" la cookie quedaría scoped al
+  // directorio del request (p. ej. /panel) y el DELETE /api/sesion del
+  // logout no recibiría nx_refresh → la revocación fallaría en silencio.
   const url = new URL(req.nextUrl.pathname + req.nextUrl.search, req.url);
   const res = NextResponse.redirect(url);
-  const base = {
+  res.cookies.set(COOKIE_SESION, nuevoAccess, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     path: "/",
+    sameSite: "lax",
     maxAge: 7 * 24 * 60 * 60, // la validez real la manda el exp del JWT
-  } as const;
-  res.cookies.set(COOKIE_SESION, nuevoAccess, { ...base, sameSite: "lax" });
+  });
   if (nuevoRefresh) {
     // El refresh nunca necesita viajar cross-site → SameSite=Strict
-    res.cookies.set(COOKIE_REFRESH, nuevoRefresh, { ...base, sameSite: "strict" });
+    res.cookies.set(COOKIE_REFRESH, nuevoRefresh, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      path: "/",
+      sameSite: "strict",
+      maxAge: 7 * 24 * 60 * 60,
+    });
   }
   return res;
 }
