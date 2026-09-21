@@ -3,6 +3,55 @@
 Herramienta de trabajo para digerir zips grandes (exports de ChatGPT/Claude, WhatsApp,
 Google Takeout, documentos y adjuntos) sin saturar el espacio de trabajo ni el contexto.
 
+---
+
+## 0. Cómo hacerme llegar los archivos (vías probadas)
+
+**El panel de adjuntos NO acepta `.zip`.** Solo acepta una lista blanca:
+`png, webp, jpeg, gif, txt, md, csv, html, xml, css, js, json, pdf`.
+Quedan afuera: `.zip`, `.rar`, `.7z`, `.docx`, `.xlsx`, `.doc`, `.mp3`, `.mp4`, etc.
+
+Además, el sandbox tiene internet **con lista blanca**: probé 20 servicios y solo pasan
+`github.com`, `api.github.com`, `codeload.github.com`, `pypi.org` y el registro de npm.
+**Están bloqueados**: Dropbox, Google Drive, OneDrive, WeTransfer, Mega, HuggingFace,
+GitLab, Bitbucket, Codeberg, archive.org, SourceForge, catbox, gofile y los "drop boxes"
+temporales. Los *release assets* de GitHub tampoco sirven: la descarga redirige a
+`release-assets.githubusercontent.com`, que está bloqueado.
+
+### Vía 1 — Adjuntos directos (la más rápida, cero preparación)
+
+Extraé el zip en tu máquina y arrastrá los archivos que **sí** están permitidos.
+En un export de chats eso es casi todo: `conversations.json`, `chat.html`, `users.json`,
+`*.txt`, `*.md`, `*.csv`, `*.pdf` e imágenes. Se pueden arrastrar muchos a la vez.
+Es la mejor vía cuando el export son pocos archivos de texto.
+
+### Vía 2 — GitHub, repo público (ideal para zips enteros)
+
+1. En tu cuenta, creá un repo público (ej. `corpus-intake`).
+2. `Add file → Upload files` y arrastrá los zips. Límite de GitHub: **100 MB por archivo**.
+3. Si un zip pesa más, partilo y subí las partes:
+   ```bash
+   split -b 90m lote.zip lote.zip.parte-    # genera lote.zip.parte-aa, -ab, ...
+   ```
+   (yo las vuelvo a unir acá: `cat lote.zip.parte-* > lote.zip`)
+4. Pasame el `usuario/repo` y yo bajo todo con:
+   ```bash
+   python3 tools/corpus/fetch.py usuario/repo --list      # ver qué hay
+   python3 tools/corpus/fetch.py usuario/repo             # bajar e ingerir
+   ```
+5. Cuando terminemos, borrás el repo.
+
+### Vía 3 — GitHub, este repo privado
+
+Mismo mecanismo, sin crear nada nuevo: subí los archivos a una carpeta `intake/` en una
+rama aparte (`intake`, no `master`) y yo la bajo igual que en la vía 2. Ventaja: es privado.
+Desventaja: los bytes quedan en el historial del repo hasta que se limpie.
+
+> Probado de punta a punta: clonado de repos públicos ✅, zip de repo público por codeload ✅,
+> zip de este repo privado con token ✅, y descarga+ingesta automática con `fetch.py` ✅.
+
+---
+
 ## Por qué vive dentro del repo
 
 En la sesión anterior dejé esta herramienta en `~/corpus-tools/` (fuera del repo) y **desapareció**

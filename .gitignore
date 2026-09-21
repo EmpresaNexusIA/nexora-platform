@@ -20,6 +20,10 @@ infra/traefik/certs/*
 docs/superpowers/plans/
 package-lock.json
 
+# Python (herramientas de proceso en tools/)
+__pycache__/
+*.pyc
+
 # Certificados locales mkcert (F2) - NUNCA al repo
 *.pem
 
