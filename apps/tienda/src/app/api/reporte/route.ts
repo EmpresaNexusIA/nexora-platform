@@ -1,10 +1,20 @@
 // NEXORA · Reporte CSV del cierre de caja (descarga del vendedor)
 
-import { getDB } from "@/lib/data";
+import { getDB, ES_DEMO } from "@/lib/data";
 import { fmtMoney } from "@/lib/format";
-import { getTiendaActual } from "@/lib/sesion";
+import { getTiendaActual, getSesion, esDueno } from "@/lib/sesion";
+
+// FIX U2: sin esto Next lo prerenderiza estático en builds demo
+// (CSV congelado del día del build).
+export const dynamic = "force-dynamic";
 
 export async function GET() {
+  // U2: el reporte es del dueño — empleados sin permisos → 403.
+  if (!ES_DEMO) {
+    const sesion = await getSesion();
+    if (!esDueno(sesion)) return new Response("Sin permisos", { status: 403 });
+  }
+
   const db = await getDB();
   const t = await getTiendaActual(); // demo: tienda actual
   if (!t) return new Response("No autorizado", { status: 401 });

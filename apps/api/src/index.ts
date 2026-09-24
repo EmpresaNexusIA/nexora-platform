@@ -184,6 +184,7 @@ app.post(
       tenant_id: string;
       password_hash: string | null;
       user_status: string;
+      role_name: string | null; // 0013: Dueño | Empleado | NULL
     };
 
     if (!user.password_hash) {
@@ -199,11 +200,16 @@ app.post(
       return reply.code(403).send({ error: "Usuario inactivo" });
     }
 
-    const accessToken = await signAccessToken(user.user_id, user.tenant_id);
-    const refreshToken = await signRefreshToken(user.user_id, user.tenant_id);
+    // El rol sale de la base (find_user_by_email 0013): NULL → undefined
+    // (compat con usuarios/tenants previos a 0013 → trato de dueño).
+    const role = user.role_name || undefined;
+    const [accessToken, refreshToken] = await Promise.all([
+      signAccessToken(user.user_id, user.tenant_id, role),
+      signRefreshToken(user.user_id, user.tenant_id, role),
+    ]);
 
-    const refreshKey = `refresh:${user.user_id}`;
-    await redis.set(refreshKey, refreshToken, "EX", 7 * 24 * 60 * 60);
+    const refreshKey = refreshKeys(user.user_id).vigente;
+    await redis.set(refreshKey, refreshToken, "EX", REFRESH_TTL_S);
 
     app.log.info(`Login OK: ${normalizedEmail} (tenant: ${user.tenant_id})`);
 
@@ -333,20 +339,51 @@ app.post(
 );
 
 // ============================================================
-//  POST /refresh — Renovar tokens (ROTACIÓN de refresh token)
+//  POST /refresh — Renovar tokens (ROTACIÓN ATÓMICA de refresh token)
 // ============================================================
+
+const REFRESH_PREV_TTL_S = 60; // ventana de gracia para requests concurrentes
+const REFRESH_TTL_S = 7 * 24 * 60 * 60;
+
+/** Único lugar que construye las claves de refresh. Layout actual:
+ *  refresh:{sub} / refresh_prev:{sub}; el layout a futuro
+ *  refresh:{sub}:{sessionId} (sesión por dispositivo) se cambia SOLO acá. */
+function refreshKeys(sub: string) {
+  return { vigente: `refresh:${sub}`, prev: `refresh_prev:${sub}` };
+}
+
+// Rotación atómica (Lua): cierra la carrera GET/comparar/SET de Fase 1.6
+// (dos /refresh simultáneos con la misma cookie rotaban ambas veces y una de
+// las respuestas dejaba un refresh que ya no matcheaba en Redis).
+// Devuelve: ARGV[3] si rotó · el vigente si el presentado era el prev y un
+// request concurrente ya rotó (ventana de 60 s) · nil si revocado o reuso
+// fuera de la ventana.
+const LUA_ROTAR_REFRESH = `
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+  redis.call('SET', KEYS[2], ARGV[1], 'EX', ARGV[2])
+  redis.call('SET', KEYS[1], ARGV[3], 'EX', ARGV[4])
+  return ARGV[3]
+end
+local cur = redis.call('GET', KEYS[1])
+if cur and redis.call('GET', KEYS[2]) == ARGV[1] then return cur end
+return nil
+`;
+
 app.post(
   "/refresh",
   {
     schema: {
       tags: ["Auth"],
-      summary: "Renovar access token (rotación de refresh token)",
+      summary: "Renovar access token (rotación atómica de refresh token)",
       description:
-        "Renueva el access token usando la cookie refresh_token con ROTACIÓN: cada uso " +
-        "emite un refresh nuevo y guarda el presentado en refresh_prev:{sub} durante 15 s " +
-        "(ventana de gracia para requests concurrentes). Si el presentado es el prev y hay " +
-        "uno vigente, devuelve el vigente sin volver a rotar. Un token que no coincide ni " +
-        "con el vigente ni con el previo devuelve 401 (sesión revocada).",
+        "Renueva el access token usando la cookie refresh_token con ROTACIÓN ATÓMICA " +
+        "(script Lua: un solo request gana la rotación; los concurrentes reciben el " +
+        "refresh vigente dentro de la ventana de gracia de 60 s). Antes de rotar se " +
+        "consulta get_user_auth_state en PostgreSQL: usuario inexistente/inactivo/" +
+        "suspendido → 401 y revocación de la sesión; el rol y el estado salen de la " +
+        "base (no del payload) para que un downgrade/revocación rija en el próximo " +
+        "refresh. Un token que no coincide ni con el vigente ni con el previo " +
+        "devuelve 401 (sesión revocada).",
     },
     // 20/min fijo a propósito: si aparecen 429 reales en producción, el log
     // refresh_rate_limited es el dato con el que se ajusta el número — no se
@@ -379,12 +416,43 @@ app.post(
       return reply.code(401).send({ error: "Token inválido" });
     }
 
-    const claveVigente = `refresh:${payload.sub}`;
-    const clavePrev = `refresh_prev:${payload.sub}`;
-    const [vigente, prev] = await Promise.all([
-      redis.get(claveVigente),
-      redis.get(clavePrev),
-    ]);
+    const { vigente: claveVigente, prev: clavePrev } = refreshKeys(payload.sub);
+
+    // El estado y el rol salen de la base, NUNCA del payload (que vivía 7 días
+    // congelado): un downgrade de rol rige en el próximo refresh y un usuario
+    // suspendido/inactivo no renueva.
+    const estado = await pool.query(
+      "SELECT * FROM get_user_auth_state($1)",
+      [payload.sub],
+    );
+    const fila = estado.rows[0] as
+      | { user_status: string; role_name: string | null }
+      | undefined;
+    if (!fila || fila.user_status !== "active") {
+      // Sin fila (usuario borrado) o inactivo/suspendido → revocar la sesión.
+      await Promise.all([redis.del(claveVigente), redis.del(clavePrev)]);
+      return reply.code(401).send({ error: "Sesión revocada" });
+    }
+    const rol = fila.role_name || undefined; // NULL → compat dueño
+
+    // Rotación atómica: firma el refresh nuevo ANTES del Lua (si falla la
+    // firma, nada se toca) y deja a Redis decidir quién rotó.
+    const nuevoRefresh = await signRefreshToken(payload.sub, payload.tenantId!, rol);
+    const resultado = (await redis.eval(
+      LUA_ROTAR_REFRESH,
+      2,
+      claveVigente,
+      clavePrev,
+      presentado,
+      REFRESH_PREV_TTL_S,
+      nuevoRefresh,
+      REFRESH_TTL_S,
+    )) as string | null;
+
+    // nil → revocado, o reuso de un token ya rotado FUERA de la ventana de 60 s.
+    if (resultado === null) {
+      return reply.code(401).send({ error: "Sesión revocada" });
+    }
 
     const cookieOpts = {
       httpOnly: true,
@@ -393,40 +461,23 @@ app.post(
       domain: config.cookie.domain,
     } as const;
 
-    // Es el vigente → ROTAR: el presentado pasa a prev (15 s) y se emite uno nuevo.
-    if (presentado === vigente) {
-      const [accessToken, nuevoRefresh] = await Promise.all([
-        signAccessToken(payload.sub, payload.tenantId!),
-        signRefreshToken(payload.sub, payload.tenantId!),
-      ]);
-      await Promise.all([
-        redis.set(clavePrev, presentado, "EX", 15),
-        redis.set(claveVigente, nuevoRefresh, "EX", 7 * 24 * 60 * 60),
-      ]);
+    const accessToken = await signAccessToken(payload.sub, payload.tenantId!, rol);
+    reply.setCookie("access_token", accessToken, { ...cookieOpts, sameSite: "lax" });
+    reply.setCookie("refresh_token", resultado, { ...cookieOpts, sameSite: "lax" });
 
-      reply.setCookie("access_token", accessToken, { ...cookieOpts, sameSite: "lax" });
-      reply.setCookie("refresh_token", nuevoRefresh, { ...cookieOpts, sameSite: "lax" });
-
-      return { accessToken, refreshToken: nuevoRefresh };
-    }
-
-    // Ventana de gracia: es el prev y todavía hay vigente → request concurrente.
-    // Devolvemos el vigente SIN rotar de nuevo (el prev expira a los 15 s).
-    if (presentado === prev && vigente) {
+    if (resultado !== nuevoRefresh) {
+      // El presentado era el prev: un request concurrente ya rotó. Devolvemos
+      // el vigente SIN rotar de nuevo (ventana de gracia de 60 s).
+      // Detección: SOLO este log — dentro de la ventana el uso de un token
+      // viejo robado es indistinguible de un request legítimo concurrente
+      // (ver docs/tienda/FASE16-REFRESH.md, sección 5).
       app.log.info(
         { event_type: "refresh_prev_used", user_id: payload.sub, tenant_id: payload.tenantId },
         "Refresh prev usado",
       );
-
-      const accessToken = await signAccessToken(payload.sub, payload.tenantId!);
-      reply.setCookie("access_token", accessToken, { ...cookieOpts, sameSite: "lax" });
-      reply.setCookie("refresh_token", vigente, { ...cookieOpts, sameSite: "lax" });
-
-      return { accessToken, refreshToken: vigente };
     }
 
-    // No matchea ni con el vigente ni con el prev: revocada, rotada y reusada, o ajena.
-    return reply.code(401).send({ error: "Sesión revocada" });
+    return { accessToken, refreshToken: resultado };
   },
 );
 
@@ -449,10 +500,8 @@ app.post(
     if (refreshToken) {
       try {
         const payload = await verifyToken(refreshToken);
-        await Promise.all([
-          redis.del(`refresh:${payload.sub}`),
-          redis.del(`refresh_prev:${payload.sub}`),
-        ]);
+        const { vigente, prev } = refreshKeys(payload.sub);
+        await Promise.all([redis.del(vigente), redis.del(prev)]);
       } catch {
         // Token inválido — igual limpiamos cookies
       }
@@ -484,9 +533,10 @@ app.get(
 
     const userInfo = await app.withTenant(request, async (db) => {
       const result = await db.execute(sql`
-        SELECT id, email, name, status
-        FROM users
-        WHERE id = ${request.userId}
+        SELECT u.id, u.email, u.name, u.status, r.name AS role
+        FROM users u
+        LEFT JOIN roles r ON r.id = u.role_id AND r.deleted_at IS NULL
+        WHERE u.id = ${request.userId}
       `);
       return result.rows[0];
     });

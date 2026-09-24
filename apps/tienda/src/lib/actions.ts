@@ -122,6 +122,12 @@ export async function setFrecuenteAction(id: string, esFrecuente: boolean, descu
 export async function guardarConfigAction(patch: Partial<Comercio>) {
   const t = await getTiendaActual();
   if (!t) return { ok: false, error: "Sin tienda" };
+  // U2: solo el dueño puede modificar la configuración (frontera server-side).
+  if (!ES_DEMO) {
+    const { getSesion, esDueno } = await import("./sesion");
+    const ses = await getSesion();
+    if (!esDueno(ses)) return { ok: false, error: "Sin permisos" };
+  }
   const db = await getDB();
   // Whitelist de seguridad: solo estos campos se pueden tocar desde el panel
   const permitidos: (keyof Comercio)[] = [

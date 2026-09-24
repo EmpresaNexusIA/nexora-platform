@@ -85,6 +85,20 @@
       "when": 1787446400000,
       "tag": "0012_platform_identity_permissions",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1787532800000,
+      "tag": "0013_tienda_roles",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1787619200000,
+      "tag": "0014_user_auth_state",
+      "breakpoints": true
     }
   ]
 }

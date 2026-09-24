@@ -178,3 +178,183 @@ tipea también la tienda.
   abierto, como hasta ahora). Con sesión real: `JWT_PUBLIC_KEY` y
   `NEXT_PUBLIC_API_URL` ya documentados en FASE15.
 - **apps/api**: sin configuración nueva — usa el Redis existente.
+
+---
+
+## 7. Actualización 2026-09-24 — U2 (roles) + fixes de seguridad
+
+> Sección de actualización: lo que sigue SUSTITUYE los comportamientos que
+> contradiga de las secciones 1–6 (la historia se conserva tal cual).
+> Validado con E2E completo (stack arriba: Postgres embebido con migraciones
+> 0000→0014 vía `node migrate.mjs`, Redis, API como `api_user`, tienda
+> `DEMO_MODE=false`) — matriz de aceptación 32/32.
+
+### 7.1 Rotación ATÓMICA en un solo `EVAL` (cierra la carrera de Fase 1.6)
+
+El flujo viejo (GET → comparar → SET) tenía una carrera: dos `/refresh`
+simultáneos con la misma cookie rotaban **las dos veces** y una de las
+respuestas dejaba un refresh que ya no matcheaba en Redis (los dos clientes
+se bloqueaban al intentar renovar de nuevo). Ahora toda la decisión corre en
+un script Lua atómico (Redis ejecuta `EVAL` single-threaded; no hay punto de
+intercalación entre leer y escribir):
+
+```lua
+if redis.call('GET', KEYS[1]) == ARGV[1] then      -- presentado == vigente
+  redis.call('SET', KEYS[2], ARGV[1], 'EX', ARGV[2])   -- previo ← presentado
+  redis.call('SET', KEYS[1], ARGV[3], 'EX', ARGV[4])   -- vigente ← nuevo
+  return ARGV[3]                                       -- "yo roté"
+end
+local cur = redis.call('GET', KEYS[1])
+if cur and redis.call('GET', KEYS[2]) == ARGV[1] then return cur end  -- concurrente: el vigente
+return nil                                                    -- revocado / reuso
+```
+
+- **Ventana de gracia 15 s → 60 s** (`refresh_prev:{sub}` EX 60): la
+  concurrencia real (varias pestañas/devices renovando a la vez) ya no
+  bloquea al perdedor, que recibe el vigente en vez de un token muerto.
+- **La API firma el refresh nuevo ANTES del `EVAL`**: si fallara la firma,
+  nada se toca en Redis. El resultado del script decide: `ARGV[3]` = rotó
+  (setea cookies con su propio refresh) · otro valor = le toca el vigente
+  (no rota de nuevo; se loguea `refresh_prev_used`) · `nil` = 401.
+
+### 7.2 Detección: lo que la ventana SÍ y NO permite
+
+- **Reuso del token viejo DENTRO de los 60 s es indistinguible de un request
+  legítimo concurrente** (el atacante y la víctima mandan exactamente el
+  mismo token). La respuesta es el vigente (el atacante NO obtiene un token
+  nuevo ni corta la sesión de la víctima) y queda registrado en el log
+  `refresh_prev_used`. **Hoy la detección es solo ese log** — sin infra de
+  métricas no hay alerta (se repite la advertencia de la sección 5).
+- **Reuso FUERA de los 60 s → 401** y la sesión queda muerta: el prev
+  expiró, el vigente no matchea → el script devuelve `nil`.
+- **Logout/suspensión → 401 inmediato**: `DEL` de ambas claves.
+
+### 7.3 El estado y el rol salen de la BASE, no del payload (migraciones 0013/0014)
+
+Antes de rotar, `/refresh` consulta `SELECT * FROM get_user_auth_state($1)`
+(función `SECURITY DEFINER` nueva, patrón 0006/0007/0010: `STABLE`,
+`search_path` fijo, `REVOKE EXECUTE FROM PUBLIC`, `GRANT EXECUTE TO
+api_user`):
+
+| Estado en DB | Resultado |
+|---|---|
+| usuario borrado (sin fila) | `401` + `DEL` de ambas claves (revoca) |
+| `status ≠ 'active'` (suspendido/inactivo) | `401` + `DEL` de ambas claves |
+| `role_name` actual | el access y el refresh **nuevos** se firman con ese rol |
+
+Consecuencias verificadas en E2E: un **downgrade de rol en la base rige en el
+próximo refresh** (sin esperar 7 días al exp del refresh viejo), y un usuario
+suspendido **no renueva** (el access en circulación sigue vivo hasta su `exp`
+de 15 min, trade-off conocido de la sección 5). `find_user_by_email` (0013)
+se redimensionó en el mismo patrón: ahora también devuelve `role_name`
+(`NULL` = usuario anterior a 0013 → compat dueño, ver 7.5).
+
+### 7.4 El refresh token SÍ lleva `jti` (decisión de la sección 5, reevaluada)
+
+La sección 5 decía "NO se agrega claim `jti`… si escala el modelo de
+amenazas, se reevalúa". El E2E de esta actualización encontró el caso: con
+RS256 determinístico e `iat` en segundos, **dos refresh firmados en el mismo
+segundo son byte-iguales** — la rotación los hace indistinguibles (el
+"vigente nuevo" es el mismo string que el viejo, y el reuso "fuera de
+ventana" sigue matcheando contra `refresh:{sub}`). `signRefreshToken` ahora
+setea `jti: crypto.randomUUID()`: cada rotación produce un token único, la
+comparación en Redis vuelve a ser una comparación de identidad y la matriz
+de reuso se vuelve determinista. El acceso no se toca (no hay rotación de
+access; `jti` no le sirve).
+
+### 7.5 Compatibilidad y permisos (U2)
+
+- **Tokens sin claim `role` = dueño** (`esDueno()` en `apps/tienda/src/lib/sesion.ts`):
+  los tokens emitidos antes de 0013 (7 días de vigencia) siguen siendo de
+  dueño; no hay lockout del fundador.
+- **5 permisos de panel**: `pedidos`, `catalogo`, `clientes`, `caja:read`,
+  `config:manage`. El trigger `trg_tenant_new_tienda_roles` (0014,
+  `AFTER INSERT ON tenants`, `SECURITY DEFINER`) crea los roles **Dueño**
+  (5 permisos) y **Empleado** (3: sin `caja:read` ni `config:manage`) en cada
+  tenant nuevo; idempotente (re-ejecutado en E2E sin duplicados).
+- **El panel filtra por rol**: la nav oculta `caja`/`config` a empleados
+  (`requiereDueno`) y las páginas `caja`/`config` redirigen a `/panel/pedidos`
+  si `!esDueno`; `GET /api/reporte` devuelve `403` sin permiso de dueño.
+  La URL directa no es una vía de acceso (el guard está en la página, no en
+  el menú).
+- **`guardarConfigAction`** (server action) repite el check en el servidor:
+  `!esDueno` → `{ ok:false, error:"Sin permisos" }` (el menú oculto no era
+  una barrera por sí solo).
+
+### 7.6 BFF de login + checks de sesión (fixes 5 y 6)
+
+- **`POST /api/login` en apps/tienda (BFF)**: el navegador manda SOLO
+  `{ email, password }`; el JWT se obtiene en el servidor
+  (Node → `apps/api /login`, timeout 10 s) y las cookies `nx_session` /
+  `nx_refresh` se fijan ahí mismo. **El refresh token nunca toca
+  JavaScript** (el flujo viejo `login → body → /api/sesion` quedaba como
+  compat). Mapa de errores: API 401 → "Credenciales inválidas" (401),
+  403 → "Usuario inactivo" (403), otro/timeout → "Error del servidor" (502).
+- **Fix #5 — `POST /api/sesion` (compat, holder de tokens crudos)**: antes
+  de fijar cookies exige que access y refresh pertenezcan al **mismo
+  `userId` y `tenantId`** (ambos revalidados con la clave pública). Impide
+  armar una sesión híbrida con un refresh robado de otra cuenta.
+- **Fix 6a — `DELETE /api/sesion` (logout)**: la revocación remota ya no
+  tapa fallas: si `apps/api /logout` no responde bien, las cookies locales
+  se borran igual y la respuesta lleva `warning: "revocation_failed"` (log
+  `console.warn` en el servidor). El cliente nunca se queda en un estado
+  "salí pero mi refresh sigue vivo sin saberlo".
+- **Fix #1 — `DEMO_MODE` fail-closed**: demo solo con `"true"` **explícito**
+  (`DEMO_MODE === "true"` en middleware, data y sesión). Variable ausente,
+  vacía o con typo → exige sesión. El despliegue público de Vercel setea
+  `DEMO_MODE=true` a propósito y sigue funcionando (verificado en E2E:
+  `/panel/*` 200 sin login); local sin la variable → `/panel` redirige a
+  `/login` (verificado en E2E). `apps/tienda/.env.example` documenta ambos
+  modos y se agregó `next.config.mjs` con CSP + headers de seguridad
+  (fix #4 del parche).
+
+### 7.7 Validación E2E (2026-09-24) — 32/32
+
+Stack: Postgres 18 embebido (migraciones 0000→0014 con `node migrate.mjs`;
+DDL de las tablas de tienda generado con `drizzle-kit generate` hacia un
+directorio scratch — no entran al journal), Redis (en el sandbox, un stub
+RESP con el `EVAL` portado de forma atómica; ver límite abajo), `apps/api`
+conectado como **`api_user`** (rol runtime) y `apps/tienda` con
+`DEMO_MODE=false` contra la DB real.
+
+| Caso | Resultado |
+|---|---|
+| Login con contraseña mala → 401 "Credenciales inválidas" | ✅ |
+| Dueño → `/panel/pedidos`, `/panel/caja`, `/panel/config`, `/api/reporte` (CSV + BOM) → 200 | ✅ |
+| Empleado → `caja`/`config` 307 a `/panel/pedidos`; `/api/reporte` 403; `pedidos` 200 | ✅ |
+| DOS `/refresh` simultáneos con el mismo token → ambos 200 con el MISMO refresh vigente | ✅ |
+| Reuso del original dentro de la ventana de 60 s → 200 con el vigente (log `refresh_prev_used`) | ✅ |
+| Reuso del original fuera de la ventana → 401 | ✅ |
+| Downgrade Dueño→Empleado en DB → refresh → el access nuevo trae `role=Empleado`; caja 307; reporte 403; restaurado → vuelve a 200 | ✅ |
+| Usuario suspendido en DB → refresh 401 + claves borradas de Redis + segundo intento 401 | ✅ |
+| Token sin claim `role` → tratado como dueño (caja/reporte 200) | ✅ |
+| `POST /api/sesion` con access de A + refresh de B → 401; par correcto → 200 | ✅ |
+| `DEMO_MODE` ausente → `/panel` 307 a `/login`; `DEMO_MODE=true` → panel abierto (compat Vercel) | ✅ |
+
+Verificado además en la base: `api_user` **sin** grants directos sobre
+`roles`/`permissions`/`roles_to_permissions` (solo `EXECUTE` sobre las
+funciones angostas); rol sin permisos no puede ejecutar
+`get_user_auth_state` (42501); re-ejecución bruta de 0013/0014 idempotente
+(sin roles duplicados); el trigger 0014 crea Dueño/Empleado al insertar el
+tenant seed.
+
+**Límite del E2E en el sandbox**: no hay binario de Redis real alcanzable
+ni `apt`, así que el `EVAL` de rotación corrió sobre un servidor RESP mínimo
+que **porta el script línea a línea y lo ejecuta atómicamente** (sin
+intercalación, igual que el `EVAL` single-threaded de Redis). Lo que valida
+esa validación es la integración de la API (keys/ARGV correctos, los tres
+resultados del script, cookies, 401s) y la matriz completa; la atomicidad
+del Lua sobre Redis real descansa en la ejecución single-threaded de `EVAL`
+(documentada por Redis). Postgres fue real (embebido, 18.4).
+
+### 7.8 Despliegue (cambios sobre la sección 6)
+
+- **Migraciones nuevas**: `0013_tienda_roles.sql` y `0014_user_auth_state.sql`
+  entran al journal (drizzle). En el banco existente: correr
+  `node migrate.mjs` desde `packages/database` (nunca `drizzle-kit migrate`).
+  Ambas son idempotentes; 0014 deja el trigger `trg_tenant_new_tienda_roles`
+  activo para tenants futuros (los existentes pueden re-ejecutar el bloque de
+  `provision_tienda_roles()` de la migración para backllear sus roles).
+- **`apps/api`**: sin configuración nueva. **`apps/tienda`**: igual que la
+  sección 6, más `DEMO_MODE` documentado en `.env.example` (demo = `"true"`
+  explícito; producción = variable ausente).
