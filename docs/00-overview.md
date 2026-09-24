@@ -21,6 +21,10 @@ solo negocios de servicios.
 - **Runbooks:** [`docs/runbooks/`](runbooks/) — procedimientos operativos
   (backup/restore, rotación de secrets, etc.), agregados desde el sub-proyecto
   8 (Seguridad y operaciones) en adelante.
+- **Tooling (referencia):** [`docs/tooling/`](tooling/) — herramientas externas
+  evaluadas para el workflow de desarrollo (p. ej.
+  [ECC agent harness](tooling/ecc-agent-harness.md)); las skills de seguridad
+  cherry-pickadas viven en [`dev-agent/`](../dev-agent/README.md).
 
 ## Orden de sub-proyectos
 
