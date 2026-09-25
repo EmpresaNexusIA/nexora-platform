@@ -211,3 +211,43 @@ git push -u origin master
 
 ---
 *(este archivo se sigue actualizando después de cada tarea)*
+
+---
+
+## Lote 1 — Conversión YA (auditoría UX NEX-26/AUD-01) — 2026-09-25
+**Rama:** `arena/01a0d90f-nexora-platform` (base master `1cee7aa`).
+Commits: `061d9b8` (D1/D8 a11y) · `2780f3e` (B3/B5 copy + conversión) · `aa848d3` (C1 email opcional).
+
+**Qué:** tokens de marca con contraste AA + `--brand-ink` + `prefers-reduced-motion` (D1/D8);
+promesa única "lista hoy / en el día" (B3) y captación con fallback a WA_NEXORA `5493412614407` (B5);
+email opcional en pedidos (C1) — UI, schema y migración `0015_pedido_email_opcional.sql`
+(copia byte-idéntica de `crear_pedido()` de `sql/0010` + solo `nullif(email)` y guard `is not null`).
+
+**Decisión journal (con el usuario, 2026-09-25):** el entry de 0015 en `_journal.json` NO va en
+esta rama: el PR de seguridad (#12, 0013/0014) sigue abierto y sin mergear. Cuando se mergee,
+esta rama se rebasa sobre master y 0015 entra directo con **idx 14** (después de 0014).
+Sin idx 12, sin renumber. El PR del lote se abre en ese momento.
+
+**Verificación (sandbox):**
+- `pnpm lint` (tsc) verde · `DEMO_MODE=true pnpm run build` 16/16 rutas.
+- Tokens AA + clase `text-brandInk` + bloque reduced-motion confirmados en el CSS compilado.
+- 0015 probada E2E sobre PostgreSQL 17.10 local (embedded, sandbox): la migración aplica;
+  pedido sin email → ok con `cliente_email` NULL · email inválido → "Revisá tu email." ·
+  email válido → normaliza (trim + lower) · pedidos existentes intactos · outbox 1:1 con pedidos (8/8 PASS).
+
+**Hallazgo importante (PG):** el patrón `select c.* into c` de `crear_pedido()` falla con
+`record "c" is not assigned yet` **ya en PG 17.10** (la nota de la auditoría lo ubicaba en PG18).
+La DB real de producción corre una versión anterior y funciona; por decisión NO se renombra el
+alias `c` en 0015 (diff mínimo vs producción). Para el test local se usó una variante con alias
+`cx` (3 refs del select inicial) **solo en el entorno de test** — misma estrategia de la auditoría;
+la lógica probada es idéntica al archivo.
+
+**Provisioning que una base migra-only no tiene (gotchas confirmados — no son bugs del patch):**
+1. El journal (0000-0012) crea core/auth/audit pero NO las tablas de tienda (nacen por
+   `drizzle-kit push` + `sql/0010` aplicado a mano en la DB real) — 0015 trunca con
+   "relation public.pedidos does not exist" sobre base vacía.
+2. `audit.outbox` del journal no trae `aggregate_type`/`aggregate_id` (forma de la DB real) —
+   el insert de `crear_pedido` al outbox truena sin esas columnas.
+3. El rol `nexora_admin` no se crea en el journal (existe por bootstrap) — 0004/0009/0008 lo requieren.
+4. `pedidos.id` / `items_pedido.id` / `clientes_frecuentes.id` no tienen default en el schema
+   (`$defaultFn` es solo lado app) — la función inserta sin `id`; la DB real lleva default en columna.
