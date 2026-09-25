@@ -13,6 +13,8 @@ const config: Config = {
       colors: {
         brand: "rgb(var(--brand) / <alpha-value>)",
         brandAccent: "rgb(var(--brand-accent) / <alpha-value>)",
+        // Tinta de marca para TEXTO (claro usa el tono AA, oscuro el claro)
+        brandInk: "rgb(var(--brand-ink) / <alpha-value>)",
       },
       borderRadius: { xl2: "1.25rem" },
       boxShadow: {

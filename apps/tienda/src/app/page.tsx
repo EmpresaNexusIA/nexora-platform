@@ -8,11 +8,11 @@ export default function Landing() {
     <main data-tema="ambar" className="mx-auto flex min-h-screen max-w-md flex-col px-5 pb-10">
       <header className="flex items-center justify-between py-5">
         <span className="text-xl font-black tracking-tight">
-          nexora<span className="text-brand">.</span>
+          nexora<span className="text-brandInk">.</span>
         </span>
         <div className="flex items-center gap-2">
           <ModoSwitcher />
-          <span className="chip bg-brand/10 font-bold text-brand">DEMO</span>
+          <span className="chip bg-brand/10 font-bold text-brandInk">DEMO</span>
         </div>
       </header>
 
@@ -38,7 +38,7 @@ export default function Landing() {
           { i: BarChart3, t: "Caja en 1 toque", d: "Cobrado vs por cobrar" },
         ].map(({ i: Icon, t, d }) => (
           <div key={t} className="card p-4">
-            <Icon size={20} className="text-brand" />
+            <Icon size={20} className="text-brandInk" />
             <div className="mt-2 text-sm font-bold">{t}</div>
             <div className="text-xs text-slate-500 dark:text-slate-400">{d}</div>
           </div>

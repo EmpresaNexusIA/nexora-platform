@@ -5,17 +5,25 @@
 /* ====== TEMAS (directiva fundador #1: 3 presets + dark) ====== */
 :root,
 [data-tema="ambar"] {
-  --brand: 245 158 11;
-  --brand-accent: 217 119 6;
+  --brand: 180 83 9; /* #B45309 — AA 5.02:1 con texto blanco (fix D1) */
+  --brand-accent: 146 64 14; /* #92400E — hover 7.09:1 */
+  --brand-ink: 180 83 9; /* tinta de marca sobre fondos claros */
 }
 [data-tema="esmeralda"] {
-  --brand: 5 150 105;
-  --brand-accent: 16 185 129;
+  --brand: 4 120 87; /* #047857 — AA 5.48:1 */
+  --brand-accent: 6 95 70; /* #065F46 — hover 7.68:1 */
+  --brand-ink: 4 120 87;
 }
 [data-tema="azul"] {
-  --brand: 37 99 235;
-  --brand-accent: 96 165 250;
+  --brand: 37 99 235; /* #2563EB — ya pasaba AA 5.17:1 */
+  --brand-accent: 29 78 216; /* #1D4ED8 — hover 6.70:1 (el accent 400 era solo para oscuro) */
+  --brand-ink: 37 99 235;
 }
+/* Tinta de marca en modo oscuro: valores claros (text-brand legible sobre
+   slate-950: ámbar 9.39:1 · esmeralda 7.95:1 · azul 7.93:1 — fix D1) */
+.dark [data-tema="ambar"] { --brand-ink: 245 158 11; }
+.dark [data-tema="esmeralda"] { --brand-ink: 16 185 129; }
+.dark [data-tema="azul"] { --brand-ink: 96 165 250; }
 
 html {
   scroll-behavior: smooth;
@@ -52,5 +60,17 @@ body {
   }
   .label-xs {
     @apply mb-1.5 block text-[11px] font-bold uppercase tracking-wide text-slate-400;
+  }
+}
+
+/* ====== Movimiento respetuoso (fix D8 — WCAG 2.3.3) ====== */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

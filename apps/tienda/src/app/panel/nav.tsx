@@ -29,7 +29,7 @@ export function PanelNav({ mostrarFinanzas }: { mostrarFinanzas?: boolean }) {
           return (
             <Link key={href} href={href}
               className={`flex flex-col items-center gap-0.5 rounded-xl px-3 py-1.5 text-[10px] font-bold transition ${
-                activo ? "text-brand" : "text-slate-400 hover:text-slate-600"
+                activo ? "text-brandInk" : "text-slate-400 hover:text-slate-600"
               }`}>
               <Icon size={20} />
               {label}

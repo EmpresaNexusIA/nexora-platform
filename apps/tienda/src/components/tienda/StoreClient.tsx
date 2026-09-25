@@ -150,13 +150,13 @@ export function StoreClient({ tienda, productos, categorias, dtoPagoPublic }: Pr
           {t.nombre} ya lo recibió. Avisá por WhatsApp para confirmarlo más rápido:
         </p>
         <a href={resultado.waUrl} target="_blank" rel="noreferrer"
-           className="mt-6 block rounded-2xl bg-[#25D366] px-4 py-4 text-base font-black text-white shadow-lg shadow-emerald-500/30 transition active:scale-[0.98]">
+           className="mt-6 block rounded-2xl bg-[#25D366] px-4 py-4 text-base font-black text-[#0B3319] shadow-lg shadow-emerald-500/30 transition active:scale-[0.98]">
           💬 Avisar por WhatsApp
         </a>
         <div className="card mt-4 p-4 text-left text-sm">
           <div className="mb-2 flex items-center justify-between font-bold">
             <span>Resumen · {p.numeroOrden}</span>
-            <span className="text-brand">{fmtMoney(p.totalFinal, t.moneda)}</span>
+            <span className="text-brandInk">{fmtMoney(p.totalFinal, t.moneda)}</span>
           </div>
           {resultado.items.map((i) => (
             <div key={i.id} className="flex justify-between py-0.5 text-slate-600 dark:text-slate-300">
@@ -299,7 +299,7 @@ export function StoreClient({ tienda, productos, categorias, dtoPagoPublic }: Pr
 
       {/* WhatsApp + sello */}
       <a href={`https://wa.me/${t.whatsapp}`} target="_blank" rel="noreferrer"
-        className="mx-4 mt-6 flex items-center justify-center gap-2 rounded-2xl bg-[#25D366] px-4 py-3.5 text-sm font-black text-white transition active:scale-[0.98]">
+        className="mx-4 mt-6 flex items-center justify-center gap-2 rounded-2xl bg-[#25D366] px-4 py-3.5 text-sm font-black text-[#0B3319] transition active:scale-[0.98]">
         <MessageCircle size={17} /> Escribinos por WhatsApp
       </a>
       <p className="mt-4 text-center text-[10px] text-slate-400">
