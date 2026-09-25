@@ -94,3 +94,7 @@ export const ANTISPAM = {
 export const TRIAL_DIAS = 14;
 export const GRACIA_DIAS = 7;
 export const RETENCION_SUSPENDIDA_DIAS = 90;
+
+// Canal WhatsApp de Nexora — número DEDICADO del bot (público, no es secreto).
+// Todo pasa por acá: captación (B5), soporte de activación, avisos del bot.
+export const WA_NEXORA = "5493412614407";

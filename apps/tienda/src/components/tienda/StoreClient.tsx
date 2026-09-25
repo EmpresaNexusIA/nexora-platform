@@ -18,6 +18,7 @@ import { computeDesglose, textoRegla } from "@/lib/money";
 import { fmtMoney, hashEmoji } from "@/lib/format";
 import { crearPedidoAction } from "@/lib/actions";
 import { ChatWidget } from "@/components/ChatWidget";
+import Link from "next/link";
 
 const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 const GRADIENTES = [
@@ -303,7 +304,7 @@ export function StoreClient({ tienda, productos, categorias, dtoPagoPublic }: Pr
         <MessageCircle size={17} /> Escribinos por WhatsApp
       </a>
       <p className="mt-4 text-center text-[10px] text-slate-400">
-        ⚡ Hecho con <b>Nexora</b> · Términos · Privacidad
+        ⚡ Hecho con <Link href="/quiero-tienda" className="font-bold underline decoration-dotted underline-offset-2"><b>Nexora</b></Link> · Términos · Privacidad
       </p>
 
       {/* Barra de carrito flotante */}

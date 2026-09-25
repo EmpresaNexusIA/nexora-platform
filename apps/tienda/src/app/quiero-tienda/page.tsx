@@ -1,34 +1,47 @@
 "use client";
 
 // NEXORA · /quiero-tienda — captación del lead hacia crm/clientes (Fase 1).
-// Postea contra apps/api del monorepo. Si no hay API configurada aún,
-// muestra el WhatsApp del fundador como canal de respaldo.
+// Postea contra apps/api del monorepo. Si no hay API configurada o falla la
+// conexión, el lead se canaliza directo a Nexora por WhatsApp (WA_NEXORA):
+// nunca se pierde una captación (fix B5).
 
 import { useState, useTransition } from "react";
-import { ArrowLeft, CheckCircle2, Send } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Send, MessageCircle } from "lucide-react";
 import Link from "next/link";
+import { WA_NEXORA } from "@/lib/constants";
 
 const API = process.env.NEXT_PUBLIC_API_URL || "";
 
 export default function QuieroTienda() {
   const [enviado, setEnviado] = useState(false);
   const [error, setError] = useState("");
+  const [waFallback, setWaFallback] = useState<string | null>(null);
   const [isPending, start] = useTransition();
+
+  const waNexora = (msg: string) =>
+    `https://wa.me/${WA_NEXORA}?text=${encodeURIComponent(msg)}`;
 
   const enviar = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError("");
     const fd = new FormData(e.currentTarget);
+    const nombre = String(fd.get("nombre") || "");
+    const telefono = String(fd.get("telefono") || "");
+    const rubro = String(fd.get("rubro") || "");
     const body = {
-      nombre: String(fd.get("nombre") || ""),
-      telefono: String(fd.get("telefono") || ""),
-      rubro: String(fd.get("rubro") || ""),
+      nombre,
+      telefono,
+      rubro,
       tieneWeb: fd.get("tieneWeb") === "on",
       notas: String(fd.get("notas") || ""),
       empresa: String(fd.get("empresa") || ""), // honeypot — siempre vacío
     };
+    // Fallback (B5): sin API o sin conexión, el lead escribe a Nexora
+    // por WhatsApp con sus datos ya armados en el mensaje.
+    const fallbackWa = () =>
+      setWaFallback(waNexora(`Hola! Quiero mi tienda en Nexora 🛍️\nSoy ${nombre}, vendo ${rubro}. Mi celu: ${telefono}`));
     start(async () => {
-      if (!API) { setError("Este entorno no tiene API configurada todavía."); return; }
+      if (!API) { fallbackWa(); return; }
       try {
         const r = await fetch(`${API}/crm/leads`, {
           method: "POST",
@@ -41,10 +54,31 @@ export default function QuieroTienda() {
           setError(j?.error || "No pudimos registrarlo. Probá de nuevo.");
         }
       } catch {
-        setError("Sin conexión con el servidor. Probá más tarde.");
+        fallbackWa();
       }
     });
   };
+
+  if (waFallback) {
+    return (
+      <main className="mx-auto flex min-h-svh max-w-md flex-col items-center justify-center gap-4 px-6 text-center">
+        <div className="flex h-20 w-20 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/40">
+          <MessageCircle size={40} className="text-emerald-600" />
+        </div>
+        <h1 className="text-2xl font-black">Escribinos directo 👋</h1>
+        <p className="text-sm text-slate-500">
+          Escribile a Nexora por WhatsApp y en el día te activamos tu tienda.
+        </p>
+        <a href={waFallback} target="_blank" rel="noreferrer"
+          className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#25D366] px-4 py-3 text-sm font-black text-[#0B3319] transition active:scale-[0.98]">
+          💬 Hablar con Nexora por WhatsApp
+        </a>
+        <button onClick={() => setWaFallback(null)} className="text-sm font-semibold text-slate-400 underline">
+          Volver al formulario
+        </button>
+      </main>
+    );
+  }
 
   if (enviado) {
     return (
@@ -67,7 +101,7 @@ export default function QuieroTienda() {
       </Link>
       <h1 className="text-2xl font-black">Quiero mi tienda 🛍️</h1>
       <p className="mb-6 mt-1 text-sm text-slate-500">
-        Dejanos tus datos y en <b>24 hs</b> tenés tu link listo para compartir en tu bio.
+        Dejanos tus datos y <b>te escribimos en el día</b> con tu link listo para compartir en tu bio.
       </p>
 
       <form onSubmit={enviar} className="space-y-3">

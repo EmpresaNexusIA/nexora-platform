@@ -21,7 +21,7 @@ export default function Landing() {
           ⚡ 0% comisión por venta, para siempre
         </div>
         <h1 className="text-4xl font-black leading-[1.05] tracking-tight">
-          Tu tienda online en <span className="text-brand">5 minutos</span>
+          Tu tienda online, <span className="text-brandInk">lista hoy</span>
         </h1>
         <p className="mt-4 text-[15px] leading-relaxed text-slate-500 dark:text-slate-400">
           Recibí pedidos ordenados por WhatsApp desde tu bio de Instagram.
@@ -46,7 +46,10 @@ export default function Landing() {
       </div>
 
       <div className="mt-8 space-y-3">
-        <Link href="/t/panaderia-maria" className="btn-primary block text-base shadow-lg shadow-brand/30">
+        <Link href="/quiero-tienda" className="btn-primary block text-base shadow-lg shadow-brand/30">
+          Quiero mi tienda 🚀
+        </Link>
+        <Link href="/t/panaderia-maria" className="btn-soft block text-base">
           Ver tienda de ejemplo → Panadería María 🍞
         </Link>
         <Link href="/panel/pedidos" className="btn-soft block text-base">
