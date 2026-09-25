@@ -111,7 +111,6 @@ export function StoreClient({ tienda, productos, categorias, dtoPagoPublic }: Pr
   const puedeConfirmar =
     cantTotal > 0 &&
     nombre.trim().length >= 2 &&
-    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) &&
     celular.replace(/\D/g, "").length >= 8 &&
     (modo === "retiro" || direccion.trim().length >= 4) &&
     !isPending;
@@ -393,7 +392,7 @@ export function StoreClient({ tienda, productos, categorias, dtoPagoPublic }: Pr
               <span className="label-xs">Tus datos (comprás como invitado)</span>
               <input className="input" placeholder="Nombre y apellido" value={nombre} onChange={(e) => setNombre(e.target.value)} />
               <div className="mt-2 grid grid-cols-2 gap-2">
-                <input className="input" type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
+                <input className="input" type="email" placeholder="Email (opcional)" value={email} onChange={(e) => setEmail(e.target.value)} />
                 <input className="input" type="tel" placeholder="Celular" value={celular} onChange={(e) => setCelular(e.target.value)} />
               </div>
               <input className="input mt-2" placeholder="Nota (opcional: 'sin cebolla', 'timbre 2'...)" value={notas} onChange={(e) => setNotas(e.target.value)} />
@@ -434,7 +433,7 @@ export function StoreClient({ tienda, productos, categorias, dtoPagoPublic }: Pr
             </div>
             <p className="mt-2 flex items-start gap-1 text-[10.5px] leading-snug text-slate-400">
               <Clock size={11} className="mt-0.5 shrink-0" />
-              Recibirás un comprobante de pedido por email (no válido como factura). El comercio emite el comprobante fiscal correspondiente.
+              Vas a ver tu comprobante en el seguimiento del pedido (no válido como factura). El comercio emite el comprobante fiscal correspondiente.
             </p>
 
             {error && (
