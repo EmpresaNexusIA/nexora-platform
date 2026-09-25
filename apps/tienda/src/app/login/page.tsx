@@ -1,13 +1,13 @@
 "use client";
 
 // NEXORA · /login — el dueño del comercio entra a su panel.
-// Login contra apps/api (Fastify) → JWT → cookie host-only vía /api/sesion.
+// BFF (fix 6b): POST /api/login (ruta propia) → el server llama a apps/api,
+// valida los JWT con la clave pública y fija las cookies httpOnly. El
+// refresh token NUNCA toca JavaScript.
 
 import { Suspense, useState, useTransition } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { LogIn } from "lucide-react";
-
-const API = process.env.NEXT_PUBLIC_API_URL || "";
 
 function LoginForm() {
   const router = useRouter();
@@ -22,7 +22,7 @@ function LoginForm() {
     const fd = new FormData(e.currentTarget);
     start(async () => {
       try {
-        const r = await fetch(`${API}/login`, {
+        const r = await fetch("/api/login", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -31,16 +31,15 @@ function LoginForm() {
           }),
         });
         if (!r.ok) {
-          setError(r.status === 401 ? "Email o contraseña incorrectos." : "Usuario inactivo o error del servidor.");
+          setError(
+            r.status === 401
+              ? "Email o contraseña incorrectos."
+              : r.status === 403
+                ? "Usuario inactivo."
+                : "Usuario inactivo o error del servidor.",
+          );
           return;
         }
-        const j = await r.json();
-        const rr = await fetch("/api/sesion", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ accessToken: j.accessToken, refreshToken: j.refreshToken }),
-        });
-        if (!rr.ok) { setError("No se pudo iniciar la sesión."); return; }
         router.replace(siguiente);
         router.refresh();
       } catch {

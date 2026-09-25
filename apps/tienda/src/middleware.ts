@@ -27,7 +27,9 @@ function irALogin(req: NextRequest) {
 export async function middleware(req: NextRequest) {
   // Demo sin backend: el panel es abierto (doc FASE15) y no hay API contra
   // la cual renovar — sin esto la preview queda trabada en /login.
-  if (process.env.DEMO_MODE !== "false") return NextResponse.next();
+  // Fail-closed (fix P1): solo DEMO_MODE="true" explícito abre el panel;
+  // variable ausente o typo → exige sesión (Vercel demo la setea a "true").
+  if (process.env.DEMO_MODE === "true") return NextResponse.next();
 
   const access = req.cookies.get(COOKIE_SESION)?.value;
   const sesion = access ? await verificarAccessToken(access) : null;

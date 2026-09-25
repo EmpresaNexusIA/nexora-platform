@@ -34,6 +34,7 @@ El backend de onboarding de Nexora permite transformar un cliente CRM en estado 
   - `tenants.status = 'pending_activation'`.
   - `users.status = 'invited'` y pertenencia al `p_tenant_id`.
   Si alguna de las 3 verificaciones no coincide con exactamente 1 fila, la función lanza una excepción y aborta la transacción. `REVOKE EXECUTE FROM PUBLIC` evita que otros roles sin privilegios ejecuten la función.
+  - **Verificado en el E2E de U2 (2026-09-24):** el endpoint público `POST /onboarding/activate` recibe SOLO `{ token, password }` del cliente (esquema Zod, sin más campos). Los IDs que la función `SECURITY DEFINER` necesita (`clientId`, `tenantId`, `userId`) **no vienen del body**: salen del payload que el script de aprovisionamiento guardó en Redis junto al hash del token (`activation_token:<sha256>`), y la API los extrae del lado servidor al consumir el token. El cliente no puede elegir a qué tenant/usuario/cliente apunta la activación: eso está fijado en el token de un solo uso. `consumeActivationToken` (`apps/api/src/lib/activation-token.ts`) hace el `GETDEL` atómico y devuelve ese payload ligado; el E2E confirmó además que `api_user` NO tiene grants directos sobre `clientes` ni sobre las tablas RBAC (`roles`, `permissions`, `roles_to_permissions`) — solo `EXECUTE` sobre las funciones angostas.
 
 ### T4. Divulgación de Información y Timing Attacks
 - **Riesgo:** Mensajes de error diferenciados o variaciones de tiempo de respuesta permiten al atacante enumerar si un token existe, expiró o fue usado.

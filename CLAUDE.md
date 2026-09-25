@@ -30,6 +30,10 @@ incompatibilidad conocida de WSL2/DrvFs. Desde Windows, el mismo repo se ve en
   van en `env/*.env.example`. Nunca commitear un valor real.
 - Tests unitarios junto al código (`apps/api/src/**/*.test.ts`). `tests/` en la
   raíz es solo para integración/e2e/carga entre servicios.
+- Seguridad en el workflow de agente: checklists cherry-pick de ECC (solo
+  markdown, nada que se ejecute solo) en `dev-agent/` — usar en reviews de
+  seguridad y antes de pasar a producción. Origen, pin y criterios en
+  `docs/tooling/ecc-agent-harness.md`.
 
 ## Sub-proyectos
 

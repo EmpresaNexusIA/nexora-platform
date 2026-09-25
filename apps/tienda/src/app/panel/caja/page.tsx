@@ -1,13 +1,19 @@
 // NEXORA · Panel → Cierre de Caja (cobrado vs por cobrar — fix M12)
-import { getDB } from "@/lib/data";
+import { getDB, ES_DEMO } from "@/lib/data";
 import { fmtMoney, fmtFechaLarga, hoyISOlocal } from "@/lib/format";
 import { METODOS_PAGO } from "@/lib/constants";
 import { Download, TrendingUp } from "lucide-react";
-import { requireTiendaActual } from "@/lib/sesion";
+import { requireTiendaActual, getSesion, esDueno } from "@/lib/sesion";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
 export default async function CajaPage() {
+  // U2: la caja es del dueño — empleados sin permisos → pedidos.
+  if (!ES_DEMO) {
+    const sesion = await getSesion();
+    if (!esDueno(sesion)) redirect("/panel/pedidos");
+  }
   const db = await getDB();
   const tienda = await requireTiendaActual();
   if (!tienda) return null;

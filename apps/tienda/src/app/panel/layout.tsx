@@ -8,11 +8,15 @@ import { ModoSwitcher } from "@/components/ThemeControls";
 import { ChatWidget } from "@/components/ChatWidget";
 import { PanelNav } from "./nav";
 import { LogoutButton } from "./logout-button";
-import { requireTiendaActual } from "@/lib/sesion";
+import { requireTiendaActual, getSesion, esDueno } from "@/lib/sesion";
 
 export default async function PanelLayout({ children }: { children: React.ReactNode }) {
   const db = await getDB();
   const tienda = await requireTiendaActual(); // demo: tienda actual
+
+  // U2: Caja y Config solo se muestran al dueño (en demo todo el panel es abierto).
+  const sesion = ES_DEMO ? null : await getSesion();
+  const mostrarFinanzas = ES_DEMO || esDueno(sesion);
 
   return (
     <div data-tema={tienda?.tema || "ambar"} className="mx-auto flex min-h-screen max-w-md flex-col">
@@ -44,7 +48,7 @@ export default async function PanelLayout({ children }: { children: React.ReactN
       {/* Copiloto del vendedor (directiva #2) */}
       {tienda && <ChatWidget slug={tienda.slug} audiencia="vendedor" nombreTienda={tienda.nombre} />}
 
-      <PanelNav />
+      <PanelNav mostrarFinanzas={mostrarFinanzas} />
     </div>
   );
 }

@@ -1,10 +1,12 @@
 import { SignJWT, jwtVerify, importSPKI, importPKCS8, type JWTPayload } from "jose";
+import { randomUUID } from "node:crypto";
 import { config } from "../config.js";
 
 export interface NexoraJWTPayload extends JWTPayload {
   sub: string;
   tenantId: string;
   type: "access" | "refresh";
+  role?: string; // U2: "Dueño" | "Empleado" | undefined (tokens viejos)
 }
 
 // Cargar claves asincrónicamente (jose requiere objetos CryptoKey, no strings)
@@ -40,9 +42,11 @@ export async function checkJwtReadiness(): Promise<void> {
   await jwtVerify(probe, verificationKey, { algorithms: ["RS256"] });
 }
 
-export async function signAccessToken(userId: string, tenantId: string): Promise<string> {
+export async function signAccessToken(userId: string, tenantId: string, role?: string): Promise<string> {
   const key = await getPrivateKey();
-  return new SignJWT({ type: "access", tenantId })
+  const payload: Record<string, unknown> = { type: "access", tenantId };
+  if (role) payload.role = role;
+  return new SignJWT(payload)
     .setProtectedHeader({ alg: "RS256", typ: "JWT" })
     .setSubject(userId)
     .setIssuedAt()
@@ -50,9 +54,15 @@ export async function signAccessToken(userId: string, tenantId: string): Promise
     .sign(key);
 }
 
-export async function signRefreshToken(userId: string, tenantId: string): Promise<string> {
+export async function signRefreshToken(userId: string, tenantId: string, role?: string): Promise<string> {
   const key = await getPrivateKey();
-  return new SignJWT({ type: "refresh", tenantId })
+  const payload: Record<string, unknown> = { type: "refresh", tenantId };
+  if (role) payload.role = role;
+  return new SignJWT(payload)
+    // jti aleatorio: sin él, dos refresh firmados en el MISMO segundo son
+    // byte-iguales (RS256 determinístico + iat en segundos) y la rotación
+    // se vuelve indistinguible (detectado en E2E 2026-09-24).
+    .setJti(randomUUID())
     .setProtectedHeader({ alg: "RS256", typ: "JWT" })
     .setSubject(userId)
     .setIssuedAt()
