@@ -228,6 +228,16 @@ esta rama: el PR de seguridad (#12, 0013/0014) sigue abierto y sin mergear. Cuan
 esta rama se rebasa sobre master y 0015 entra directo con **idx 14** (después de 0014).
 Sin idx 12, sin renumber. El PR del lote se abre en ese momento.
 
+**Checklist para el merge de #12 (el usuario avisa cuando pase):**
+1. Rebase de `arena/01a0d90f-nexora-platform` sobre `origin/master`.
+2. Entry de 0015 en `_journal.json` con **idx 14** (después de 0014) + commit + push.
+3. Verificar `pnpm lint` + `DEMO_MODE=true pnpm build` (el rebase no toca código).
+4. Abrir el PR contra master con la descripción completa (fixes B1/B3/B5/C1/D1/D2/D8,
+   verificación, decisión de orden del journal y la nota del upgrade de PG ≥ 17).
+   **Nota obligatoria en el PR (pedida por el usuario):** "El check de Vercel va a
+   aparecer en rojo — es esperado y no bloquea el merge (solo validate-compose +
+   lint son requeridos)."
+
 **Verificación (sandbox):**
 - `pnpm lint` (tsc) verde · `DEMO_MODE=true pnpm run build` 16/16 rutas.
 - Tokens AA + clase `text-brandInk` + bloque reduced-motion confirmados en el CSS compilado.
