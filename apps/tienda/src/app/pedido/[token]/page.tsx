@@ -88,7 +88,7 @@ export default async function SeguimientoPage({ params }: { params: { token: str
       </div>
 
       <a href={`https://wa.me/${t.whatsapp}`} target="_blank" rel="noreferrer"
-        className="mt-5 flex items-center justify-center gap-2 rounded-2xl bg-[#25D366] px-4 py-3.5 text-sm font-black text-white transition active:scale-[0.98]">
+        className="mt-5 flex items-center justify-center gap-2 rounded-2xl bg-[#25D366] px-4 py-3.5 text-sm font-black text-[#0B3319] transition active:scale-[0.98]">
         <MessageCircle size={16} /> Hablar con {t.nombre}
       </a>
 

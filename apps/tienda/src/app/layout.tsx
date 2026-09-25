@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Nexora · Tu tienda online en 5 minutos",
+  title: "Nexora · Tu tienda online, lista hoy",
   description: "Creá tu tienda, recibí pedidos por WhatsApp y vendé más. Sin comisiones.",
   manifest: "/manifest.json",
 };

@@ -21,7 +21,7 @@ export const pedidos = pgTable("pedidos", {
   modoEntrega: varchar("modo_entrega", { length: 12 }).notNull(),
   direccionEntrega: text("direccion_entrega").notNull().default(""),
   clienteNombre: varchar("cliente_nombre", { length: 255 }).notNull(),
-  clienteEmail: varchar("cliente_email", { length: 255 }).notNull(),
+  clienteEmail: varchar("cliente_email", { length: 255 }), // opcional desde 0015 (fix C1)
   clienteTelefono: varchar("cliente_telefono", { length: 32 }).notNull(),
   notasCliente: text("notas_cliente").notNull().default(""),
   costoEnvio: numeric("costo_envio", { precision: 10, scale: 2 }).notNull().default("0"),

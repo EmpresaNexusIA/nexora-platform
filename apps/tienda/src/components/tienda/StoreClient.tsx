@@ -18,6 +18,7 @@ import { computeDesglose, textoRegla } from "@/lib/money";
 import { fmtMoney, hashEmoji } from "@/lib/format";
 import { crearPedidoAction } from "@/lib/actions";
 import { ChatWidget } from "@/components/ChatWidget";
+import Link from "next/link";
 
 const norm = (s: string) => s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 const GRADIENTES = [
@@ -110,7 +111,6 @@ export function StoreClient({ tienda, productos, categorias, dtoPagoPublic }: Pr
   const puedeConfirmar =
     cantTotal > 0 &&
     nombre.trim().length >= 2 &&
-    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) &&
     celular.replace(/\D/g, "").length >= 8 &&
     (modo === "retiro" || direccion.trim().length >= 4) &&
     !isPending;
@@ -150,13 +150,13 @@ export function StoreClient({ tienda, productos, categorias, dtoPagoPublic }: Pr
           {t.nombre} ya lo recibió. Avisá por WhatsApp para confirmarlo más rápido:
         </p>
         <a href={resultado.waUrl} target="_blank" rel="noreferrer"
-           className="mt-6 block rounded-2xl bg-[#25D366] px-4 py-4 text-base font-black text-white shadow-lg shadow-emerald-500/30 transition active:scale-[0.98]">
+           className="mt-6 block rounded-2xl bg-[#25D366] px-4 py-4 text-base font-black text-[#0B3319] shadow-lg shadow-emerald-500/30 transition active:scale-[0.98]">
           💬 Avisar por WhatsApp
         </a>
         <div className="card mt-4 p-4 text-left text-sm">
           <div className="mb-2 flex items-center justify-between font-bold">
             <span>Resumen · {p.numeroOrden}</span>
-            <span className="text-brand">{fmtMoney(p.totalFinal, t.moneda)}</span>
+            <span className="text-brandInk">{fmtMoney(p.totalFinal, t.moneda)}</span>
           </div>
           {resultado.items.map((i) => (
             <div key={i.id} className="flex justify-between py-0.5 text-slate-600 dark:text-slate-300">
@@ -299,11 +299,11 @@ export function StoreClient({ tienda, productos, categorias, dtoPagoPublic }: Pr
 
       {/* WhatsApp + sello */}
       <a href={`https://wa.me/${t.whatsapp}`} target="_blank" rel="noreferrer"
-        className="mx-4 mt-6 flex items-center justify-center gap-2 rounded-2xl bg-[#25D366] px-4 py-3.5 text-sm font-black text-white transition active:scale-[0.98]">
+        className="mx-4 mt-6 flex items-center justify-center gap-2 rounded-2xl bg-[#25D366] px-4 py-3.5 text-sm font-black text-[#0B3319] transition active:scale-[0.98]">
         <MessageCircle size={17} /> Escribinos por WhatsApp
       </a>
       <p className="mt-4 text-center text-[10px] text-slate-400">
-        ⚡ Hecho con <b>Nexora</b> · Términos · Privacidad
+        ⚡ Hecho con <Link href="/quiero-tienda" className="font-bold underline decoration-dotted underline-offset-2"><b>Nexora</b></Link> · Términos · Privacidad
       </p>
 
       {/* Barra de carrito flotante */}
@@ -392,7 +392,7 @@ export function StoreClient({ tienda, productos, categorias, dtoPagoPublic }: Pr
               <span className="label-xs">Tus datos (comprás como invitado)</span>
               <input className="input" placeholder="Nombre y apellido" value={nombre} onChange={(e) => setNombre(e.target.value)} />
               <div className="mt-2 grid grid-cols-2 gap-2">
-                <input className="input" type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
+                <input className="input" type="email" placeholder="Email (opcional)" value={email} onChange={(e) => setEmail(e.target.value)} />
                 <input className="input" type="tel" placeholder="Celular" value={celular} onChange={(e) => setCelular(e.target.value)} />
               </div>
               <input className="input mt-2" placeholder="Nota (opcional: 'sin cebolla', 'timbre 2'...)" value={notas} onChange={(e) => setNotas(e.target.value)} />
@@ -433,7 +433,7 @@ export function StoreClient({ tienda, productos, categorias, dtoPagoPublic }: Pr
             </div>
             <p className="mt-2 flex items-start gap-1 text-[10.5px] leading-snug text-slate-400">
               <Clock size={11} className="mt-0.5 shrink-0" />
-              Recibirás un comprobante de pedido por email (no válido como factura). El comercio emite el comprobante fiscal correspondiente.
+              Vas a ver tu comprobante en el seguimiento del pedido (no válido como factura). El comercio emite el comprobante fiscal correspondiente.
             </p>
 
             {error && (
