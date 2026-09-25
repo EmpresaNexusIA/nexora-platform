@@ -187,7 +187,7 @@ tipea también la tienda.
 > contradiga de las secciones 1–6 (la historia se conserva tal cual).
 > Validado con E2E completo (stack arriba: Postgres embebido con migraciones
 > 0000→0014 vía `node migrate.mjs`, Redis, API como `api_user`, tienda
-> `DEMO_MODE=false`) — matriz de aceptación 32/32.
+> `DEMO_MODE=false`) — matriz de aceptación 56/56 (ver §7.7).
 
 ### 7.1 Rotación ATÓMICA en un solo `EVAL` (cierra la carrera de Fase 1.6)
 
@@ -308,19 +308,23 @@ access; `jti` no le sirve).
   modos y se agregó `next.config.mjs` con CSP + headers de seguridad
   (fix #4 del parche).
 
-### 7.7 Validación E2E (2026-09-24) — 32/32
+### 7.7 Validación E2E — 56/56 (2026-09-25; el 2026-09-24 quedó en 32/32)
 
 Stack: Postgres 18 embebido (migraciones 0000→0014 con `node migrate.mjs`;
 DDL de las tablas de tienda generado con `drizzle-kit generate` hacia un
 directorio scratch — no entran al journal), Redis (en el sandbox, un stub
-RESP con el `EVAL` portado de forma atómica; ver límite abajo), `apps/api`
-conectado como **`api_user`** (rol runtime) y `apps/tienda` con
-`DEMO_MODE=false` contra la DB real.
+RESP que **porta línea a línea y ejecuta atómicamente los dos scripts Lua**
+que usa la API; ver límite abajo), `apps/api` conectado como **`api_user`**
+(rol runtime) y `apps/tienda` con `DEMO_MODE=false` contra la DB real
+(más instancias con `DEMO_MODE` ausente y `DEMO_MODE=true` para los casos
+de compatibilidad).
+
+**Matriz de autenticación y RBAC (31):**
 
 | Caso | Resultado |
 |---|---|
-| Login con contraseña mala → 401 "Credenciales inválidas" | ✅ |
-| Dueño → `/panel/pedidos`, `/panel/caja`, `/panel/config`, `/api/reporte` (CSV + BOM) → 200 | ✅ |
+| Login con contraseña mala → 401 "Credenciales inválidas" (BFF) | ✅ |
+| Dueño → `/panel/pedidos`, `/panel/caja`, `/panel/config`, `/api/reporte` (CSV + BOM `EF BB BF` + pedido seed) → 200 | ✅ |
 | Empleado → `caja`/`config` 307 a `/panel/pedidos`; `/api/reporte` 403; `pedidos` 200 | ✅ |
 | DOS `/refresh` simultáneos con el mismo token → ambos 200 con el MISMO refresh vigente | ✅ |
 | Reuso del original dentro de la ventana de 60 s → 200 con el vigente (log `refresh_prev_used`) | ✅ |
@@ -329,7 +333,35 @@ conectado como **`api_user`** (rol runtime) y `apps/tienda` con
 | Usuario suspendido en DB → refresh 401 + claves borradas de Redis + segundo intento 401 | ✅ |
 | Token sin claim `role` → tratado como dueño (caja/reporte 200) | ✅ |
 | `POST /api/sesion` con access de A + refresh de B → 401; par correcto → 200 | ✅ |
-| `DEMO_MODE` ausente → `/panel` 307 a `/login`; `DEMO_MODE=true` → panel abierto (compat Vercel) | ✅ |
+
+**Matriz del revisor — casos extra (15):**
+
+| Caso | Resultado |
+|---|---|
+| Login de usuario **inactivo/suspendido** → 403 "Usuario inactivo", sin cookies | ✅ |
+| `/refresh` con refresh **expirado** (firma válida, `exp` en el pasado) → 401 | ✅ |
+| `/refresh` con refresh **falsificado** (firmado con la clave correcta pero nunca registrado) — otro usuario → 401 | ✅ |
+| Ídem con **otro tenant** en el claim → 401 | ✅ |
+| `POST /logout` (API) → 200 + `refresh:{sub}` borrado de Redis + `/refresh` posterior → 401 | ✅ |
+| `DELETE /api/sesion` (tienda) → 200 `ok:true` + cookies `nx_session`/`nx_refresh` borradas + revocación remota en Redis | ✅ |
+
+**Rate limiting real (7)** — `@fastify/rate-limit@10` usa un script Lua por
+`defineCommand` (EVAL la primera vez, `EVALSHA` después; el stub porta ese
+script con la misma semántica, incluido el `INCR` que no toca el TTL):
+
+| Caso | Resultado |
+|---|---|
+| `/login` 10/min → 10×401 y 429 en el 11°; llave `fastify-rate-limit-POST/login-<ip>` con TTL>0 | ✅ |
+| `/refresh` 20/min → 20×200 y 429 en el 21° | ✅ |
+| GLOBAL 100/min → 429 exactamente en el intento 101 (`GET /me`) | ✅ |
+
+**`DEMO_MODE` (3, fail-closed del fix 1):**
+
+| Caso | Resultado |
+|---|---|
+| `DEMO_MODE=false` → `/panel/pedidos` 307 a `/login` (exige sesión) | ✅ |
+| `DEMO_MODE` **ausente** → 307 a `/login` (fail-closed) | ✅ |
+| `DEMO_MODE=true` → `/panel/pedidos` 200 sin sesión (compat Vercel) | ✅ |
 
 Verificado además en la base: `api_user` **sin** grants directos sobre
 `roles`/`permissions`/`roles_to_permissions` (solo `EXECUTE` sobre las
@@ -339,13 +371,16 @@ funciones angostas); rol sin permisos no puede ejecutar
 tenant seed.
 
 **Límite del E2E en el sandbox**: no hay binario de Redis real alcanzable
-ni `apt`, así que el `EVAL` de rotación corrió sobre un servidor RESP mínimo
-que **porta el script línea a línea y lo ejecuta atómicamente** (sin
-intercalación, igual que el `EVAL` single-threaded de Redis). Lo que valida
-esa validación es la integración de la API (keys/ARGV correctos, los tres
-resultados del script, cookies, 401s) y la matriz completa; la atomicidad
-del Lua sobre Redis real descansa en la ejecución single-threaded de `EVAL`
-(documentada por Redis). Postgres fue real (embebido, 18.4).
+ni `apt`, así que el `EVAL` corrió sobre un servidor RESP mínimo que
+**porta línea a línea y ejecuta atómicamente** (sin intercalación, igual que
+el `EVAL` single-threaded de Redis) los dos scripts que usa la API: el de
+rotación de `/refresh` y el de rate limiting de `@fastify/rate-limit`
+(verificado que el `sha1` que genera ioredis coincide con el del paquete,
+`b8a19d477859…`). Lo que valida esa validación es la integración de la API
+(keys/ARGV correctos, los tres resultados de rotación, los 429 de los tres
+límites, cookies, 401s) y la matriz completa; la atomicidad del Lua sobre
+Redis real descansa en la ejecución single-threaded de `EVAL` (documentada
+por Redis). Postgres fue real (embebido, 18.4).
 
 ### 7.8 Despliegue (cambios sobre la sección 6)
 
